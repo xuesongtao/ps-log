@@ -1,0 +1,16 @@
+gitee.com/xuesongtao/gotool v1.1.3/go.mod h1:QT+9qIASH/zbjaLAkzpBGqpvbwIldYSrKO4KPfatiRg=
+gitee.com/xuesongtao/gotool v1.2.6 h1:mr3Sxn+45pEjgsdnvYWzTrhvMccAzrZwqZeXb3sw37g=
+gitee.com/xuesongtao/gotool v1.2.6/go.mod h1:Nl5l9f9uLUghfUr/g4gX/y6asDaE+wnMTQLgwa317w8=
+gitee.com/xuesongtao/taskpool v1.2.3 h1:jOhmGchbajS3p5zqqJUJGbfXwEGkcQv9aXW43fYLIbk=
+gitee.com/xuesongtao/taskpool v1.2.3/go.mod h1:jsoBYi2xD4AxTpsgVIKzlg584yiboiKjotVW9z3Xe3Y=
+gitee.com/xuesongtao/xlog v1.0.6 h1:NaR9CuqJD6bvT58FLF9tyNzQf7ZJMaHj9D7g7ofKXAw=
+gitee.com/xuesongtao/xlog v1.0.6/go.mod h1:AQhKM7w+0FGVv5X6hvaDxxLhQFI0/UNHUTZ44kUWcVk=
+github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
+github.com/fsnotify/fsnotify v1.6.0/go.mod h1:sl3t1tCWJFWoRz9R8WJCbQihKKwmorjAbSClcnxKAGw=
+github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646/go.mod h1:jpp1/29i3P1S/RLdc7JQKbRpFeM1dOBd8T9ki5s+AY8=
+golang.org/x/image v0.0.0-20220902085622-e7cb96979f69/go.mod h1:doUCurBvlfPMKfmIpRIywoHmhN3VyhnoFDbvIEWF4hY=
+golang.org/x/sys v0.0.0-20220908164124-27713097b956/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.3.0 h1:w8ZOecv6NaNa/zC8944JTU3vz4u6Lagfk4RPQxv92NQ=
+golang.org/x/sys v0.3.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
