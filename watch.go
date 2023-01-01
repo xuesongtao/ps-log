@@ -12,15 +12,16 @@ import (
 
 // Watch 监听的文件
 type Watch struct {
-	fileMap  map[string]*FileInfo // key: file path
-	filePool *xfile.FilePool      // 缓存所有涉及到的 文件句柄
-	watcher  *fsnotify.Watcher    // 监听
+	fileMap  map[string]*WatchFileInfo // key: file path
+	filePool *xfile.FilePool           // 缓存所有涉及到的 文件句柄
+	watcher  *fsnotify.Watcher         // 监听
 }
 
-// WatchBus 传递参数
-type WatchBus struct {
-	FileInfo *FileInfo
-	FilePool *xfile.FilePool
+// WatchFileInfo
+type WatchFileInfo struct {
+	Dir           bool   // 是否为目录
+	Path          string // 文件路径, 这里可能是文件路径或目录路径
+	WatchFilePath string // 监听到的变化的文件路径
 }
 
 // NewTailFiles
@@ -32,7 +33,7 @@ func NewWatch(filePoolSize int) (*Watch, error) {
 	}
 
 	obj := &Watch{
-		fileMap:  make(map[string]*FileInfo),
+		fileMap:  make(map[string]*WatchFileInfo),
 		filePool: xfile.NewFilePool(filePoolSize),
 		watcher:  watcher,
 	}
@@ -43,6 +44,7 @@ func NewWatch(filePoolSize int) (*Watch, error) {
 // 说明:
 //	1. paths 中可以报目录和文件
 // 	2. 建议使用绝对路径
+//  3. 自行去重
 func (w *Watch) Add(paths ...string) error {
 	for _, path := range paths {
 		st, err := os.Lstat(path)
@@ -53,11 +55,11 @@ func (w *Watch) Add(paths ...string) error {
 		if _, ok := w.fileMap[path]; ok {
 			continue
 		}
-		fileInfo := &FileInfo{IsDir: false, Path: path}
+		watchFileInfo := &WatchFileInfo{Dir: false, Path: path}
 		if st.IsDir() {
-			fileInfo.IsDir = true
+			watchFileInfo.Dir = true
 		}
-		w.fileMap[path] = fileInfo
+		w.fileMap[path] = watchFileInfo
 		if err := w.watcher.Add(path); err != nil {
 			return fmt.Errorf("add %q is failed, err: %v", path, err)
 		}
@@ -85,7 +87,7 @@ func (w *Watch) Close() {
 }
 
 // Watch 文件监听
-func (w *Watch) Watch(handleFn func(*WatchBus)) {
+func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 	defer func() {
 		if err := recover(); err != nil {
 			plog.Error("recover err:", debug.Stack())
@@ -113,34 +115,31 @@ func (w *Watch) Watch(handleFn func(*WatchBus)) {
 			}
 
 			plog.Infof("filename: %q, op: %s", event.Name, event.Op.String())
-			fileInfo := w.getFileInfo(event.Name)
-			if fileInfo == nil {
+			watchFileInfo := w.getWatchFileInfo(event.Name)
+			if watchFileInfo == nil {
 				continue
 			}
-			handleFn(&WatchBus{
-				FileInfo: fileInfo,
-				FilePool: w.filePool,
-			})
+			busCh <- watchFileInfo
 		}
 	}
 }
 
-func (w *Watch) getFileInfo(filename string) *FileInfo {
+func (w *Watch) getWatchFileInfo(filename string) *WatchFileInfo {
 	var (
-		ok       bool
-		fileInfo *FileInfo
+		ok            bool
+		watchFileInfo *WatchFileInfo
 	)
 	// 这里查找2次, filename 为文件全路径
 	// 如果根据 filename 没有查询到, 再按照 filename 目录查询下
 	for i := 0; i < 2; i++ {
-		fileInfo, ok = w.fileMap[filename]
+		watchFileInfo, ok = w.fileMap[filename]
 		if !ok {
 			filename = filepath.Dir(filename)
 			continue
 		}
 		break
 	}
-	return fileInfo
+	return watchFileInfo
 }
 
 func (w *Watch) inEvenOps(target fsnotify.Op, ins ...fsnotify.Op) bool {
