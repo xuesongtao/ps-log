@@ -2,92 +2,135 @@ package pslog
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime/debug"
+	"sync"
+	"time"
 
-	"gitee.com/xuesongtao/gotool/xfile"
-	"gitee.com/xuesongtao/taskpool"
-	"gitee.com/xuesongtao/xlog"
+	tl "gitee.com/xuesongtao/taskpool"
+)
+
+const (
+	sentryTimeDur time.Duration = time.Hour        // 哨兵的处理间隔
+	offsetDir                   = "/.pslog_offset" // 保存偏移量的文件目录
+)
+
+var (
+	noHandlerErr = errors.New("tos is null, you call Register first")
 )
 
 // Opt
 type Opt func(*PsLog)
 
-// WithTail 是否实时监听 log
-func WithTail(is bool) Opt {
+// WithAsync2Tos 异步处理 tos
+func WithAsync2Tos(poolSize int) Opt {
 	return func(pl *PsLog) {
-		pl.tail = is
+		pl.async2Tos = true
+		pl.taskPool = tl.NewTaskPool("parse log", poolSize)
 	}
 }
 
 // PsLog 解析 log
 type PsLog struct {
-	tail       bool // 是否实时
-	taskPool   *taskpool.TaskPool
-	filePool   *xfile.FilePool
-	watch      *Watch
-	watchCh    chan *WatchFileInfo
-	logPathMap map[string]*FileInfo // 需要解析的 log
-	tos        []Toer               // 外部处理方法
-	targets    []string             // 目标 msg
-	excludes   []string             // 排除 msg
-}
-
-type FileInfo struct {
-	FileName string // 文件名
-	Offset   int64  // 当前文件偏移量
+	tail      bool // 是否实时
+	async2Tos bool // 是否异步处理 tos
+	closed    bool
+	rwMu      sync.RWMutex
+	buf       *bytes.Buffer        // 内容 buf
+	taskPool  *tl.TaskPool         // 任务池
+	handler   *Handler             // 处理部分
+	watch     *Watch               // 文件监听
+	watchCh   chan *WatchFileInfo  // 文件监听文件内容
+	closeCh   chan struct{}        // 关闭通知
+	logMap    map[string]*FileInfo // 需要处理的 log, key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
 // 注: 结束时需要调用 Close
 func NewPsLog(opts ...Opt) (*PsLog, error) {
 	obj := &PsLog{
-		targets:    make([]string, 0, 5),
-		logPathMap: make(map[string]*FileInfo),
+		buf:     new(bytes.Buffer),
+		logMap:  make(map[string]*FileInfo),
+		handler: new(Handler),
+		closeCh: make(chan struct{}),
 	}
 
-	for _, o := range opts {
-		o(obj)
+	for _, opt := range opts {
+		opt(obj)
 	}
 
-	if obj.tail {
-		size := 2 << 4
-		watch, err := NewWatch(size)
-		if err != nil {
-			panic(fmt.Sprintf("NewWatch is failed, err:%v", err))
-		}
-		obj.watch = watch
-		obj.watchCh = make(chan *WatchFileInfo, size)
-		go obj.watch.Watch(obj.watchCh)
-	}
+	// 哨兵
+	go obj.sentry()
 	return obj, nil
 }
 
 // Register 注册处理器
-func (p *PsLog) Register(h []Toer) {
-	p.tos = append(p.tos, h...)
+func (p *PsLog) Register(handler *Handler) error {
+	p.handler = handler
+	return nil
 }
 
-// AddLogPaths 添加 log path
-func (p *PsLog) AddLogPaths(paths ...string) error {
+// AddPaths 添加 path, path 必须为文件全路径
+// 根据 PsLog.Handler 进行处理
+func (p *PsLog) AddPaths(paths ...string) error {
+	path2HandlerMap := make(map[string]*Handler, len(paths))
 	for _, path := range paths {
-		if _, ok := p.logPathMap[path]; ok {
+		path2HandlerMap[path] = p.handler
+	}
+	return p.addLogPath(path2HandlerMap)
+}
+
+// AddPath2HandlerMap 添加文件对应的处理方法
+// 只会根据文件对应的 Handler 进行处理
+func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
+	return p.addLogPath(path2HandlerMap)
+}
+
+// addLogPath 添加 log path, 同时添加监听 log path
+func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
+
+	for path, handler := range path2HandlerMap {
+		path = filepath.Clean(path)
+		if _, ok := p.logMap[path]; ok {
 			continue
 		}
 
-		st, err := os.Stat(path)
+		// 全局处理器为空时, 文件对应的必须有
+		if p.handler == nil {
+			if err := handler.Valid(); err != nil {
+				return fmt.Errorf("%q handler is not ok, err: %v", path, err)
+			}
+		}
+
+		f, err := os.Open(path)
 		if err != nil {
-			return fmt.Errorf("os.Stat is failed, err: %v", err)
+			return fmt.Errorf("os.Open %q is failed, err: %v", path, err)
+		}
+
+		st, err := f.Stat()
+		if err != nil {
+			return fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
 		}
 
 		if st.IsDir() {
 			return fmt.Errorf("path must log path, %q is dir", path)
 		}
 
-		p.logPathMap[path] = &FileInfo{}
-		if p.tail {
+		if handler.Change == 0 {
+			handler.Change = defaultHandleChange
+		}
+		fileInfo := &FileInfo{f: f, Handler: handler}
+		fileInfo.Parse(path)
+		fileInfo.initOffset()
+		p.logMap[path] = fileInfo
+		if p.tail && handler.Tail {
 			if err := p.watch.Add(path); err != nil {
 				return fmt.Errorf("p.watch.Add is failed, err: %v", err)
 			}
@@ -96,119 +139,207 @@ func (p *PsLog) AddLogPaths(paths ...string) error {
 	return nil
 }
 
-// Targets 设置解析目标
-func (p *PsLog) Targets(target ...string) {
-	p.targets = append(p.targets, target...)
-}
-
-// Excludes 设置排除内容
-func (p *PsLog) Excludes(excludes ...string) {
-	if p.excludes == nil {
-		p.excludes = make([]string, 0, len(excludes))
-	}
-	p.excludes = append(p.excludes, excludes...)
-}
-
+// Close 释放资源
 func (p *PsLog) Close() {
-	p.taskPool.Close()
-	p.filePool.Close()
-	close(p.watchCh)
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
+
+	if p.closed { // 已经关了的就退出, 防止重复关闭 chan panic
+		return
+	}
+
+	if p.taskPool != nil {
+		p.taskPool.Close()
+	}
+	if p.watch != nil {
+		p.watch.Close()
+	}
+	for _, fileInfo := range p.logMap {
+		fileInfo.Close()
+	}
+
+	// close(p.watchCh) // p.watch.Close() 执行后, p.watchCh 会被关闭
+	close(p.closeCh)
+	p.closed = true
 }
 
-// TailLog 实时解析 log
-func (p *PsLog) TailLog() {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				plog.Error("recover err:", debug.Stack())
-			}
-			p.Close()
-		}()
+// TailLogs 实时解析 log
+// watchSize 为监听到文件变化处理数据的 chan 的长度, 建议为监听文件的个数
+func (p *PsLog) TailLogs(watchChSize ...int) error {
+	p.tail = true
 
-		for {
-			select {
-			case watchInfo, ok := <-p.watchCh:
-				if !ok {
-					break
-				}
-				fileInfo, ok := p.logPathMap[watchInfo.Path]
-				if !ok {
-					continue
-				}
-				fileInfo.FileName = watchInfo.Path
-				p.parseLog(fileInfo)
-			default:
+	size := 1 << 4
+	if len(watchChSize) > 0 && watchChSize[0] > 0 {
+		size = watchChSize[0]
+	}
+
+	// 初始化 watch
+	watch, err := NewWatch()
+	if err != nil {
+		return fmt.Errorf("NewWatch is failed, err:%v", err)
+	}
+	p.watch = watch
+	p.watchCh = make(chan *WatchFileInfo, size)
+	p.watch.Watch(p.watchCh)
+
+	// 开始监听
+	go func() {
+		defer p.final()
+
+		// 退出情况
+		// 1. watch 退出
+		// 2. Close 后
+		for watchInfo := range p.watchCh {
+			p.rwMu.RLock()
+			fileInfo, ok := p.logMap[watchInfo.Path]
+			p.rwMu.RUnlock()
+			if !ok {
+				logger.Infof("%q is not exist", watchInfo.Path)
+				continue
 			}
+			if !fileInfo.Handler.Tail {
+				logger.Infof("%q no need tail", watchInfo.Path)
+				continue
+			}
+			p.parseLog(fileInfo) // 防止在解析的时候, fileInfo 变化
 		}
+		logger.Info("watchCh is closed")
 	}()
+	return nil
 }
 
 // cronLog 定时解析 log
-func (p *PsLog) CronLog() {
+func (p *PsLog) CronLogs() {
 
 }
 
+// parseLog 解析文件
 func (p *PsLog) parseLog(fileInfo *FileInfo) {
-	if p.filePool == nil {
-		p.filePool = xfile.NewFilePool()
+	if fileInfo.f == nil {
+		if err := fileInfo.ReOpen(); err != nil {
+			logger.Error("fileInfo.ReOpen is failed, err:", err)
+			return
+		}
 	}
-	fh, err := p.filePool.Get(fileInfo.FileName, os.O_RDONLY)
-	if err != nil {
-		plog.Error("p.filePool.Get is failed, err:", err)
+
+	if fileInfo.closed {
+		logger.Warning("%q is closed", fileInfo.FileName())
 		return
 	}
-	defer p.filePool.Put(fh)
 
-	f := fh.GetFile()
+	f := fileInfo.f
 	st, err := f.Stat()
 	if err != nil {
-		plog.Error("f.Stat is failed, err:", err)
-		return
-	}
-	plog.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName, fileInfo.Offset, st.Size())
-	_, err = f.Seek(fileInfo.Offset, io.SeekStart)
-	if err != nil {
-		plog.Error("fh.GetFile().Seek is failed, err:", err)
+		logger.Error("f.Stat %q is failed, err: %v", fileInfo.FileName(), err)
 		return
 	}
 
-	// rowBuf := new(strings.Builder)
+	logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, st.Size())
+	_, err = f.Seek(fileInfo.offset, io.SeekStart)
+	if err != nil {
+		logger.Error("f.Seek is failed, err:", err)
+		return
+	}
 
 	// 逐行读取
+	defer p.buf.Reset()
 	rows := bufio.NewScanner(f)
 	for rows.Scan() {
 		rowStr := rows.Text()
-		if rowStr == "" {
+		if !p.need(rowStr) {
 			continue
 		}
-		xlog.Info("rowStr:", rowStr)
+		p.buf.WriteString(rowStr + "\n")
 	}
 
 	if st.Size() == 0 {
 		return
 	}
-	fileInfo.Offset = st.Size()
+	fileInfo.setOffset(st.Size())
+	p.writer(p.buf.Bytes())
 }
 
-// Writer 写入目标, 默认同步处理
-func (p *PsLog) Writer(txt string, async ...bool) {
-	// 异步
-	if len(async) > 0 && async[0] {
-		// 通过懒加载方式进行初始化
-		if p.taskPool == nil {
-			p.taskPool = taskpool.NewTaskPool("parse log", len(p.tos), taskpool.WithProGoWorker())
-		}
+// need 需要处理
+func (p *PsLog) need(row string) bool {
+	if row == "" {
+		return false
+	}
 
-		for _, to := range p.tos {
+	return true
+}
+
+// writer 写入目标, 默认同步处理
+func (p *PsLog) writer(buf []byte, handler ...*Handler) {
+	if len(p.handler.Tos) == 0 {
+		logger.Warning(noHandlerErr)
+		return
+	}
+
+	// 异步
+	if p.async2Tos {
+		for _, to := range p.handler.Tos {
 			p.taskPool.Submit(func() {
-				to.WriterTo(txt)
+				to.Write(buf)
 			})
 		}
 		return
 	}
 
 	// 同步
-	for _, to := range p.tos {
-		to.WriterTo(txt)
+	for _, to := range p.handler.Tos {
+		to.Write(buf)
 	}
+}
+
+func (p *PsLog) final() {
+	if err := recover(); err != nil {
+		logger.Error("recover err:", debug.Stack())
+	}
+	p.Close()
+}
+
+// sentry 哨兵
+func (p *PsLog) sentry() {
+	defer p.final()
+
+	ticker := time.NewTicker(sentryTimeDur)
+	defer ticker.Stop()
+	for {
+		select {
+		case t, ok := <-ticker.C:
+			if !ok {
+				return
+			}
+
+			// 清理过期句柄
+			p.cleanFileInfo(t)
+		case _, ok := <-p.closeCh:
+			if !ok {
+				logger.Info("sentry is exit")
+				return
+			}
+		}
+	}
+}
+
+// cleanFileInfo 清理文件句柄
+func (p *PsLog) cleanFileInfo(curTime time.Time) {
+	logger.Info("cleanFileInfo cleaning...")
+	p.rwMu.RLock()
+	delPaths := make([]string, 0, len(p.logMap)) // 待删除的文件路径
+	for path, fileInfo := range p.logMap {
+		if fileInfo.IsExpire(curTime) {
+			delPaths = append(delPaths, path)
+			fileInfo.Close()
+		}
+	}
+	p.rwMu.RUnlock()
+
+	// 移除
+	p.rwMu.Lock()
+	for _, path := range delPaths {
+		delete(p.logMap, path)
+		p.watch.Remove(path)
+	}
+	p.rwMu.Unlock()
 }

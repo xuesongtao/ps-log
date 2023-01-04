@@ -3,8 +3,8 @@ gitee.com/xuesongtao/gotool v1.2.7 h1:raG4BBYj7NAY/IlV8rEFBZAullrQ+7HHYmCqdA7wlv
 gitee.com/xuesongtao/gotool v1.2.7/go.mod h1:Nl5l9f9uLUghfUr/g4gX/y6asDaE+wnMTQLgwa317w8=
 gitee.com/xuesongtao/taskpool v1.2.3 h1:jOhmGchbajS3p5zqqJUJGbfXwEGkcQv9aXW43fYLIbk=
 gitee.com/xuesongtao/taskpool v1.2.3/go.mod h1:jsoBYi2xD4AxTpsgVIKzlg584yiboiKjotVW9z3Xe3Y=
-gitee.com/xuesongtao/xlog v1.0.6 h1:NaR9CuqJD6bvT58FLF9tyNzQf7ZJMaHj9D7g7ofKXAw=
-gitee.com/xuesongtao/xlog v1.0.6/go.mod h1:AQhKM7w+0FGVv5X6hvaDxxLhQFI0/UNHUTZ44kUWcVk=
+gitee.com/xuesongtao/xlog v1.0.8 h1:k/BXJKLgyJzsJygWbTILYpitfSMx6Pwrv1+W7UyU7bk=
+gitee.com/xuesongtao/xlog v1.0.8/go.mod h1:AQhKM7w+0FGVv5X6hvaDxxLhQFI0/UNHUTZ44kUWcVk=
 github.com/fsnotify/fsnotify v1.6.0 h1:n+5WquG0fcWoWp6xPWfHdbskMCQaFnG6PfBrh1Ky4HY=
 github.com/fsnotify/fsnotify v1.6.0/go.mod h1:sl3t1tCWJFWoRz9R8WJCbQihKKwmorjAbSClcnxKAGw=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646/go.mod h1:jpp1/29i3P1S/RLdc7JQKbRpFeM1dOBd8T9ki5s+AY8=

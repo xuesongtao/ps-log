@@ -5,46 +5,43 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 
-	"gitee.com/xuesongtao/gotool/xfile"
-	"github.com/fsnotify/fsnotify"
+	fs "github.com/fsnotify/fsnotify"
 )
 
 // Watch 监听的文件
 type Watch struct {
-	fileMap  map[string]*WatchFileInfo // key: file path
-	filePool *xfile.FilePool           // 缓存所有涉及到的 文件句柄
-	watcher  *fsnotify.Watcher         // 监听
+	fileMap map[string]*WatchFileInfo // key: file path
+	watcher *fs.Watcher               // 监听
 }
 
 // WatchFileInfo
 type WatchFileInfo struct {
-	Dir           bool   // 是否为目录
-	Path          string // 文件路径, 这里可能是文件路径或目录路径
-	WatchFilePath string // 监听到的变化的文件路径
+	IsDir         bool   // 是否为目录
+	Path          string // 原始添加的文件路径, 这里可能是文件路径或目录路径
+	WatchFilePath string // 监听到的变化的文件全路径
 }
 
-// NewTailFiles
-// filePoolSize 控制缓存待监听文件句柄的 pool 大小
-func NewWatch(filePoolSize int) (*Watch, error) {
-	watcher, err := fsnotify.NewWatcher()
+// NewWatch 监听
+func NewWatch() (*Watch, error) {
+	watcher, err := fs.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("fsnotify.NewWatcher is failed, err:%v", err)
+		return nil, fmt.Errorf("fs.NewWatcher is failed, err:%v", err)
 	}
 
 	obj := &Watch{
-		fileMap:  make(map[string]*WatchFileInfo),
-		filePool: xfile.NewFilePool(filePoolSize),
-		watcher:  watcher,
+		fileMap: make(map[string]*WatchFileInfo),
+		watcher: watcher,
 	}
 	return obj, nil
 }
 
 // Add 添加待 watch 的路径
 // 说明:
-//	1. paths 中可以报目录和文件
-// 	2. 建议使用绝对路径
-//  3. 自行去重
+//  1. 自行去重
+//	2. paths 中可以为目录和文件
+// 	3. 建议使用绝对路径
 func (w *Watch) Add(paths ...string) error {
 	for _, path := range paths {
 		st, err := os.Lstat(path)
@@ -55,10 +52,12 @@ func (w *Watch) Add(paths ...string) error {
 		if _, ok := w.fileMap[path]; ok {
 			continue
 		}
-		watchFileInfo := &WatchFileInfo{Dir: false, Path: path}
+		watchFileInfo := &WatchFileInfo{IsDir: false, Path: path}
 		if st.IsDir() {
-			watchFileInfo.Dir = true
+			watchFileInfo.IsDir = true
 		}
+
+		// 保存和监听
 		w.fileMap[path] = watchFileInfo
 		if err := w.watcher.Add(path); err != nil {
 			return fmt.Errorf("add %q is failed, err: %v", path, err)
@@ -68,12 +67,12 @@ func (w *Watch) Add(paths ...string) error {
 }
 
 // Remove 移除待 watch 的路径
-func (w *Watch) Remove(files ...string) error {
-	for _, file := range files {
-		file = filepath.Clean(file)
-		delete(w.fileMap, file)
-		if err := w.watcher.Remove(file); err != nil {
-			return fmt.Errorf("remove %q is failed, err: %v", file, err)
+func (w *Watch) Remove(paths ...string) error {
+	for _, path := range paths {
+		path = filepath.Clean(path)
+		delete(w.fileMap, path)
+		if err := w.watcher.Remove(path); err != nil {
+			return fmt.Errorf("remove %q is failed, err: %v", path, err)
 		}
 	}
 	return nil
@@ -82,46 +81,48 @@ func (w *Watch) Remove(files ...string) error {
 // Close
 func (w *Watch) Close() {
 	w.fileMap = nil
-	w.filePool = nil
 	w.watcher.Close()
 }
 
-// Watch 文件监听
+// Watch 文件异步监听
 func (w *Watch) Watch(busCh chan *WatchFileInfo) {
-	defer func() {
-		if err := recover(); err != nil {
-			plog.Error("recover err:", debug.Stack())
+	go func() {
+		defer func() {
+			w.watcher.Close()
+			close(busCh)
+			if err := recover(); err != nil {
+				logger.Error("recover err:", debug.Stack())
+			}
+		}()
+
+		for {
+			select {
+			case err, ok := <-w.watcher.Errors:
+				if !ok {
+					logger.Info("err channel is closed")
+					return
+				}
+				logger.Error("watch err:", err)
+			case event, ok := <-w.watcher.Events:
+				if !ok {
+					logger.Info("event channel is closed")
+					return
+				}
+
+				// 只处理 create, write
+				if !w.inEvenOps(event.Op, fs.Write, fs.Create) {
+					continue
+				}
+
+				logger.Infof("filename: %q, op: %s", event.Name, event.Op.String())
+				watchFileInfo := w.getWatchFileInfo(event.Name)
+				if watchFileInfo == nil {
+					continue
+				}
+				busCh <- watchFileInfo
+			}
 		}
-		w.Close()
 	}()
-
-	for {
-		select {
-		case err, ok := <-w.watcher.Errors:
-			if !ok {
-				plog.Info("err channel is closed")
-				return
-			}
-			plog.Error("watch err:", err)
-		case event, ok := <-w.watcher.Events:
-			if !ok {
-				plog.Info("event channel is closed")
-				return
-			}
-
-			// 只处理 create, write
-			if !w.inEvenOps(event.Op, fsnotify.Write, fsnotify.Create) {
-				continue
-			}
-
-			plog.Infof("filename: %q, op: %s", event.Name, event.Op.String())
-			watchFileInfo := w.getWatchFileInfo(event.Name)
-			if watchFileInfo == nil {
-				continue
-			}
-			busCh <- watchFileInfo
-		}
-	}
 }
 
 func (w *Watch) getWatchFileInfo(filename string) *WatchFileInfo {
@@ -142,11 +143,22 @@ func (w *Watch) getWatchFileInfo(filename string) *WatchFileInfo {
 	return watchFileInfo
 }
 
-func (w *Watch) inEvenOps(target fsnotify.Op, ins ...fsnotify.Op) bool {
+func (w *Watch) inEvenOps(target fs.Op, ins ...fs.Op) bool {
 	for _, in := range ins {
 		if in == target {
 			return true
 		}
 	}
 	return false
+}
+
+// WatchList 查询监听的所有 path
+func (w *Watch) WatchList() string {
+	buf := new(strings.Builder)
+	defer buf.Reset()
+
+	for path := range w.fileMap {
+		buf.WriteString(path + "\n")
+	}
+	return buf.String()
 }

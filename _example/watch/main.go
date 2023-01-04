@@ -8,18 +8,26 @@ import (
 )
 
 func main() {
-	w, err := pslog.NewWatch(10)
+	w, err := pslog.NewWatch()
 	if err != nil {
 		xlog.Panic(err)
 	}
+	defer w.Close()
 
-	handleFn := func(bus *pslog.WatchBus) {
-		fmt.Println(bus.FileInfo.Path)
-	}
 	dir := "/Users/xuesongtao/goProject/src/myGo/ps-log/_example/watch"
-	if err := w.Add(dir+"/tmp", dir+"/tmp1/test.txt", dir+"/tmp2/test.txt"); err != nil {
+	watchList := []string{
+		dir + "/tmp",
+		dir + "/tmp1/test.txt",
+		dir + "/tmp2/test.txt",
+	}
+	if err := w.Add(watchList...); err != nil {
 		panic(err)
 	}
-	go w.Watch(handleFn)
+	handleCh := make(chan *pslog.WatchFileInfo, 3)
+	w.Watch(handleCh)
+
+	for c := range handleCh {
+		fmt.Println(c.Path)
+	}
 	<-make(chan int, 1)
 }
