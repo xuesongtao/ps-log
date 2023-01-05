@@ -10,14 +10,8 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sync"
-	"time"
 
 	tl "gitee.com/xuesongtao/taskpool"
-)
-
-const (
-	sentryTimeDur time.Duration = time.Hour        // 哨兵的处理间隔
-	offsetDir                   = "/.pslog_offset" // 保存偏移量的文件目录
 )
 
 var (
@@ -46,7 +40,6 @@ type PsLog struct {
 	handler   *Handler             // 处理部分
 	watch     *Watch               // 文件监听
 	watchCh   chan *WatchFileInfo  // 文件监听文件内容
-	closeCh   chan struct{}        // 关闭通知
 	logMap    map[string]*FileInfo // 需要处理的 log, key: 文件路径
 }
 
@@ -57,15 +50,11 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 		buf:     new(bytes.Buffer),
 		logMap:  make(map[string]*FileInfo),
 		handler: new(Handler),
-		closeCh: make(chan struct{}),
 	}
 
 	for _, opt := range opts {
 		opt(obj)
 	}
-
-	// 哨兵
-	go obj.sentry()
 	return obj, nil
 }
 
@@ -126,7 +115,7 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 		if handler.Change == 0 {
 			handler.Change = defaultHandleChange
 		}
-		fileInfo := &FileInfo{f: f, Handler: handler}
+		fileInfo := &FileInfo{Handler: handler}
 		fileInfo.Parse(path)
 		fileInfo.initOffset()
 		p.logMap[path] = fileInfo
@@ -148,18 +137,16 @@ func (p *PsLog) Close() {
 		return
 	}
 
+	filePool.Close()
+
 	if p.taskPool != nil {
 		p.taskPool.Close()
 	}
 	if p.watch != nil {
 		p.watch.Close()
 	}
-	for _, fileInfo := range p.logMap {
-		fileInfo.Close()
-	}
 
 	// close(p.watchCh) // p.watch.Close() 执行后, p.watchCh 会被关闭
-	close(p.closeCh)
 	p.closed = true
 }
 
@@ -215,19 +202,14 @@ func (p *PsLog) CronLogs() {
 
 // parseLog 解析文件
 func (p *PsLog) parseLog(fileInfo *FileInfo) {
-	if fileInfo.f == nil {
-		if err := fileInfo.ReOpen(); err != nil {
-			logger.Error("fileInfo.ReOpen is failed, err:", err)
-			return
-		}
-	}
-
-	if fileInfo.closed {
-		logger.Warning("%q is closed", fileInfo.FileName())
+	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
+	if err != nil {
+		logger.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
 		return
 	}
-
-	f := fileInfo.f
+	defer filePool.Put(fh)
+	
+	f := fh.GetFile()
 	st, err := f.Stat()
 	if err != nil {
 		logger.Error("f.Stat %q is failed, err: %v", fileInfo.FileName(), err)
@@ -296,50 +278,4 @@ func (p *PsLog) final() {
 		logger.Error("recover err:", debug.Stack())
 	}
 	p.Close()
-}
-
-// sentry 哨兵
-func (p *PsLog) sentry() {
-	defer p.final()
-
-	ticker := time.NewTicker(sentryTimeDur)
-	defer ticker.Stop()
-	for {
-		select {
-		case t, ok := <-ticker.C:
-			if !ok {
-				return
-			}
-
-			// 清理过期句柄
-			p.cleanFileInfo(t)
-		case _, ok := <-p.closeCh:
-			if !ok {
-				logger.Info("sentry is exit")
-				return
-			}
-		}
-	}
-}
-
-// cleanFileInfo 清理文件句柄
-func (p *PsLog) cleanFileInfo(curTime time.Time) {
-	logger.Info("cleanFileInfo cleaning...")
-	p.rwMu.RLock()
-	delPaths := make([]string, 0, len(p.logMap)) // 待删除的文件路径
-	for path, fileInfo := range p.logMap {
-		if fileInfo.IsExpire(curTime) {
-			delPaths = append(delPaths, path)
-			fileInfo.Close()
-		}
-	}
-	p.rwMu.RUnlock()
-
-	// 移除
-	p.rwMu.Lock()
-	for _, path := range delPaths {
-		delete(p.logMap, path)
-		p.watch.Remove(path)
-	}
-	p.rwMu.Unlock()
 }

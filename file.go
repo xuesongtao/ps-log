@@ -2,7 +2,6 @@ package pslog
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,43 +11,16 @@ import (
 	"gitee.com/xuesongtao/gotool/base"
 )
 
+const (
+	offsetDir = "/.pslog_offset" // 保存偏移量的文件目录
+)
+
 type FileInfo struct {
-	closed       bool // 标记是否已关闭
-	f            *os.File
 	Handler      *Handler // 这里优先 PsLog.handler
 	Dir          string   // 文件目录
 	Name         string   // 文件名
 	offsetChange int32    // 记录 offset 变化次数
 	offset       int64    // 当前文件偏移量
-}
-
-// GetF 获取文件句柄
-func (f *FileInfo) GetF() *os.File {
-	return f.f
-}
-
-// Close
-func (f *FileInfo) Close() error {
-	f.closed = true
-	return f.f.Close()
-}
-
-// ReOpen 重新 os.Open
-func (f *FileInfo) ReOpen() error {
-	filename := f.FileName()
-	if f.f != nil {
-		if err := f.Close(); err != nil {
-			return fmt.Errorf("f.Close %q is failed, err: %v", filename, err)
-		}
-		return nil
-	}
-
-	var err error
-	f.f, err = os.Open(filename)
-	if err != nil {
-		return fmt.Errorf("os.Open %q is failed, err: %v", filename, err)
-	}
-	return nil
 }
 
 // FileName 获取文件的全路径名
@@ -112,9 +84,10 @@ func (f *FileInfo) initOffset() {
 	}
 
 	// 需要判断下是否已处理过
-	offset, err := getContent(f.offsetFilename())
+	filename := f.offsetFilename()
+	offset, err := f.getContent(filename)
 	if err != nil {
-		logger.Errorf("getContent %q is failed, err: %v", f.offsetFilename(), err)
+		logger.Errorf("f.getContent %q is failed, err: %v", filename, err)
 		return
 	}
 	offsetInt, _ := strconv.Atoi(offset)
@@ -124,47 +97,33 @@ func (f *FileInfo) initOffset() {
 // saveOffset 保存偏移量
 // 通过隐藏文件来保存
 func (f *FileInfo) saveOffset() {
-	_, err := putContent(f.offsetFilename(), base.ToString(f.offset))
-	if err != nil {
-		logger.Errorf("putContent %q is failed, err: %v", f.offsetFilename(), err)
+	filename := f.offsetFilename()
+	if _, err := f.putContent(filename, base.ToString(f.offset)); err != nil {
+		logger.Error("f.putContent is failed, err:", err)
 	}
 }
 
-// putContents 向文件里写内容, 只会复写
-func putContent(path string, content string) (int, error) {
-	fh, err := filePool.Get(path, os.O_WRONLY|os.O_TRUNC|os.O_RDONLY)
-	if err != nil {
-		return 0, fmt.Errorf("filePool.Get %q is failed, err: %v", path, err)
-	}
-	defer filePool.Put(fh)
-
-	f := fh.GetFile()
-	return f.WriteString(content)
-}
-
-// getContent 获取文件内容
-func getContent(path string) (string, error) {
-	fh, err := filePool.Get(path, os.O_RDONLY|os.O_WRONLY|os.O_TRUNC)
+// getContent 查询
+func (f *FileInfo) getContent(path string) (string, error) {
+	fh, err := filePool.Get(path, os.O_RDWR)
 	if err != nil {
 		return "", fmt.Errorf("filePool.Get %q is failed, err: %v", path, err)
 	}
 	defer filePool.Put(fh)
 
-	data := make([]byte, 0, 100)
-	f := fh.GetFile()
-	for {
-		if len(data) >= cap(data) {
-			d := append(data[:cap(data)], 0)
-			data = d[:len(data)]
-		}
-		n, err := f.Read(data[len(data):cap(data)])
-		data = data[:len(data)+n]
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return "", err
-		}
+	data, err := fh.GetContent()
+	if err != nil {
+		return "", fmt.Errorf("getContent %q is failed, err: %v", path, err)
 	}
-	return string(data), nil
+	return data, nil
+}
+
+// putContent 覆写
+func (f *FileInfo) putContent(path string, content string) (int, error) {
+	fh, err := filePool.Get(path, os.O_RDWR|os.O_TRUNC)
+	if err != nil {
+		return 0, fmt.Errorf("filePool.Get %q is failed, err: %v", path, err)
+	}
+	defer filePool.Put(fh)
+	return fh.PutContent(content)
 }

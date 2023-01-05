@@ -16,43 +16,6 @@ var (
 	tmpDir = "./tmp"
 )
 
-func TestTail(t *testing.T) {
-	ps, _ := NewPsLog()
-	ps.TailLogs()
-
-	tmp := tmpDir + "/test.log"
-	handler := &Handler{
-		Tail:     true,
-		ExpireAt: NoExpire,
-		Tos:      []io.Writer{os.Stdout},
-		Targets:  []string{},
-		Excludes: []string{},
-	}
-	ps.Register(handler)
-	ps.AddPaths(tmp)
-
-	xfile.PutContent(tmp, "\n")
-
-	go func() {
-		fh := xfile.NewFileHandle(tmp)
-		if err := fh.Initf(os.O_CREATE | os.O_RDWR); err != nil {
-			xlog.Error(err)
-			return
-		}
-		f := fh.GetFile()
-		for i := 0; i < 100; i++ {
-			time.Sleep(time.Second)
-			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
-			if err != nil {
-				xlog.Error("write err:", err)
-			}
-		}
-	}()
-	time.Sleep(time.Second * 15)
-	ps.Close()
-	time.Sleep(time.Second * 2)
-}
-
 func TestTailSaveOffset(t *testing.T) {
 	ps, _ := NewPsLog()
 	ps.TailLogs()
@@ -70,24 +33,28 @@ func TestTailSaveOffset(t *testing.T) {
 	ps.Register(handler)
 	ps.AddPaths(tmp)
 
-	// xfile.PutContent(tmp, "\n")
-
+	closeCh := make(chan struct{})
 	go func() {
 		fh := xfile.NewFileHandle(tmp)
-		if err := fh.Initf(os.O_CREATE | os.O_RDWR); err != nil {
+		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
 			xlog.Error(err)
 			return
 		}
+		defer fh.Close()
+
 		f := fh.GetFile()
-		for i := 0; i < 100; i++ {
-			time.Sleep(time.Second)
+		for i := 0; i < 30; i++ {
+			time.Sleep(time.Microsecond)
 			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
 				xlog.Error("write err:", err)
 			}
 		}
+		close(closeCh)
 	}()
-	time.Sleep(time.Second * 15)
+
+	for range closeCh {
+	}
 	ps.Close()
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 5)
 }
