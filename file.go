@@ -2,6 +2,7 @@ package pslog
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
-	xf "gitee.com/xuesongtao/gotool/xfile"
 )
 
 type FileInfo struct {
@@ -107,9 +107,14 @@ func (f *FileInfo) offsetFilename() string {
 
 // initOffset 初始化文件 offset
 func (f *FileInfo) initOffset() {
-	offset, err := xf.GetContent(f.offsetFilename())
+	if f.offset > 0 {
+		return
+	}
+
+	// 需要判断下是否已处理过
+	offset, err := getContent(f.offsetFilename())
 	if err != nil {
-		logger.Errorf("xf.GetContent %q is failed, err: %v", f.offsetFilename(), err)
+		logger.Errorf("getContent %q is failed, err: %v", f.offsetFilename(), err)
 		return
 	}
 	offsetInt, _ := strconv.Atoi(offset)
@@ -117,9 +122,49 @@ func (f *FileInfo) initOffset() {
 }
 
 // saveOffset 保存偏移量
+// 通过隐藏文件来保存
 func (f *FileInfo) saveOffset() {
-	_, err := xf.PutContent(f.offsetFilename(), base.ToString(f.offset))
+	_, err := putContent(f.offsetFilename(), base.ToString(f.offset))
 	if err != nil {
-		logger.Errorf("xf.PutContent %q is failed, err: %v", f.offsetFilename(), err)
+		logger.Errorf("putContent %q is failed, err: %v", f.offsetFilename(), err)
 	}
+}
+
+// putContents 向文件里写内容, 只会复写
+func putContent(path string, content string) (int, error) {
+	fh, err := filePool.Get(path, os.O_WRONLY|os.O_TRUNC|os.O_RDONLY)
+	if err != nil {
+		return 0, fmt.Errorf("filePool.Get %q is failed, err: %v", path, err)
+	}
+	defer filePool.Put(fh)
+
+	f := fh.GetFile()
+	return f.WriteString(content)
+}
+
+// getContent 获取文件内容
+func getContent(path string) (string, error) {
+	fh, err := filePool.Get(path, os.O_RDONLY|os.O_WRONLY|os.O_TRUNC)
+	if err != nil {
+		return "", fmt.Errorf("filePool.Get %q is failed, err: %v", path, err)
+	}
+	defer filePool.Put(fh)
+
+	data := make([]byte, 0, 100)
+	f := fh.GetFile()
+	for {
+		if len(data) >= cap(data) {
+			d := append(data[:cap(data)], 0)
+			data = d[:len(data)]
+		}
+		n, err := f.Read(data[len(data):cap(data)])
+		data = data[:len(data)+n]
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", err
+		}
+	}
+	return string(data), nil
 }

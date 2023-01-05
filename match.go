@@ -4,41 +4,41 @@ import (
 	"gitee.com/xuesongtao/gotool/base"
 )
 
-type Node struct {
+type node struct {
 	IsRoot      bool
 	IsEnd       bool
 	Data        byte
-	ChildrenMap map[byte]*Node
+	ChildrenMap map[byte]*node
 }
 
-func NewNode(b byte, root ...bool) *Node {
+func NewNode(b byte, root ...bool) *node {
 	isRoot := false
 	if len(root) > 0 && root[0] {
 		isRoot = root[0]
 	}
-	return &Node{
+	return &node{
 		IsRoot:      isRoot,
 		Data:        b,
-		ChildrenMap: make(map[byte]*Node),
+		ChildrenMap: make(map[byte]*node),
 	}
 }
 
-func (n *Node) String() string {
+func (n *node) String() string {
 	return base.ToString(n)
 }
 
 // 字典树
-type tireTree struct {
-	root *Node
+type tire struct {
+	root *node
 }
 
-func newTire() *tireTree {
+func newTire() *tire {
 	// 根节点设置为 '/'
-	return &tireTree{root: NewNode('/', true)}
+	return &tire{root: NewNode('/', true)}
 }
 
 // insert 新增模式串
-func (t *tireTree) insert(bytes []byte) {
+func (t *tire) insert(bytes []byte) {
 	dataLen := len(bytes)
 	curNode := t.root
 	for i := 0; i < dataLen; i++ {
@@ -52,7 +52,7 @@ func (t *tireTree) insert(bytes []byte) {
 }
 
 // search 查询主串
-func (t *tireTree) search(target []byte) bool {
+func (t *tire) search(target []byte) bool {
 	dataLen := len(target)
 	curNode := t.root
 	for i := 0; i < dataLen; i++ {
@@ -69,5 +69,6 @@ func (t *tireTree) search(target []byte) bool {
 		}
 		curNode = curNode.ChildrenMap[b]
 	}
+	// fmt.Println(curNode)
 	return curNode.IsEnd
 }

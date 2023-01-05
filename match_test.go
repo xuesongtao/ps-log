@@ -5,18 +5,6 @@ import (
 	"testing"
 )
 
-func TestTrie(t *testing.T) {
-	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
-	// row := `[ERRO] 110.184`
-	tree := newTire()
-	tree.insert([]byte("1101"))
-	tree.insert([]byte("ERRO"))
-	t.Log(tree.search([]byte(row)))
-}
-
-
-
-
 var (
 	tts = [][]byte{
 		[]byte("1101"),
@@ -31,6 +19,30 @@ var (
 		[]byte("b a ERRO"),
 	}
 )
+
+func contains(by []byte) bool {
+	for _, t := range tts {
+		if ok := bytes.Contains(by, t); ok {
+			return ok
+		}
+	}
+	return false
+}
+
+func TestTrie(t *testing.T) {
+	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
+	// row := `[ERRO] 110.184`
+	tree := newTire()
+	for _, tt := range tts {
+		tree.insert(tt)
+	}
+
+	bb := []byte(row)
+	ok := contains(bb)
+	if tree.search(bb) != ok {
+		t.Errorf("handle is failed, it should is [%v]", ok)
+	}
+}
 
 func BenchmarkMatchForTire(b *testing.B) {
 	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
@@ -50,8 +62,6 @@ func BenchmarkMatchForContains(b *testing.B) {
 	by := []byte(row)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		for _, t := range tts {
-			bytes.Contains(by, t)
-		}
+		contains(by)
 	}
 }
