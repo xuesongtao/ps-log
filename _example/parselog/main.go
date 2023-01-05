@@ -24,6 +24,7 @@ func main() {
 	}
 
 	handler := &pslog.Handler{
+		Change:   -1,
 		Tail:     true,
 		ExpireAt: pslog.NoExpire,
 		Tos: []io.Writer{
@@ -37,7 +38,7 @@ func main() {
 	}
 	go func() {
 		fh := xfile.NewFileHandle("./log/test.log")
-		if err := fh.Initf(os.O_CREATE | os.O_RDWR); err != nil {
+		if err := fh.Initf(os.O_RDWR | os.O_TRUNC); err != nil {
 			xlog.Error(err)
 			return
 		}

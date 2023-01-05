@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	offsetDir = "/.pslog_offset" // 保存偏移量的文件目录
+	saveOffsetDir = "/.pslog_offset" // 保存偏移量的文件目录
 )
 
 type FileInfo struct {
@@ -74,7 +74,7 @@ func (f *FileInfo) setOffset(offset int64) {
 // offsetFilename 获取保存文件偏移量的名称
 func (f *FileInfo) offsetFilename() string {
 	// 处理为 xxx/.pslog_offset/_xxx.txt
-	return filepath.Join(".", f.Dir, offsetDir, "_"+f.CleanNameFmt()+".txt")
+	return filepath.Join(".", f.Dir, saveOffsetDir, "_"+f.CleanNameFmt()+".txt")
 }
 
 // initOffset 初始化文件 offset

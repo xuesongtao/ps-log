@@ -18,8 +18,8 @@ var (
 
 // Handler 处理的部分
 type Handler struct {
-	Change   int32       // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
 	Tail     bool        // 是否实时处理, 说明: true 为实时; false 需要外部定时调用
+	Change   int32       // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
 	ExpireAt time.Time   // 过期时间, 如: 2022-12-03 11:11:10
 	Tos      []io.Writer // 外部处理方法
 	Targets  []string    // 目标 msg

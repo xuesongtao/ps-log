@@ -208,7 +208,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		return
 	}
 	defer filePool.Put(fh)
-	
+
 	f := fh.GetFile()
 	st, err := f.Stat()
 	if err != nil {
@@ -216,7 +216,12 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		return
 	}
 
-	logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, st.Size())
+	fileSize := st.Size()
+	logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	if fileSize == 0 || fileInfo.offset >= fileSize {
+		return
+	}
+
 	_, err = f.Seek(fileInfo.offset, io.SeekStart)
 	if err != nil {
 		logger.Error("f.Seek is failed, err:", err)
@@ -234,10 +239,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		p.buf.WriteString(rowStr + "\n")
 	}
 
-	if st.Size() == 0 {
-		return
-	}
-	fileInfo.setOffset(st.Size())
+	fileInfo.setOffset(fileSize)
 	p.writer(p.buf.Bytes())
 }
 
