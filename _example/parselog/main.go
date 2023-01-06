@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
-	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
 	pslog "gitee.com/xuesongtao/ps-log"
 	"gitee.com/xuesongtao/xlog"
@@ -30,7 +28,7 @@ func main() {
 		Tos: []io.Writer{
 			os.Stdout,
 		},
-		Targets:  []string{},
+		Targets:  []string{"1", "5"},
 		Excludes: []string{},
 	}
 	if err := ps.Register(handler); err != nil {
@@ -43,9 +41,10 @@ func main() {
 			return
 		}
 		f := fh.GetFile()
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 10; i++ {
 			// time.Sleep(time.Second)
-			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+			// _, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+			_, err := f.WriteString(fmt.Sprint(i) + "\n")
 			if err != nil {
 				xlog.Error("write err:", err)
 			}

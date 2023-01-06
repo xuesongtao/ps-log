@@ -5,10 +5,11 @@ import (
 )
 
 type node struct {
-	IsRoot      bool
-	IsEnd       bool
-	Data        byte
-	ChildrenMap [128]*node
+	isNull   bool // 用于标记 tire 除根以外是否为空, 只在 root node 记录有效
+	IsRoot   bool
+	IsEnd    bool
+	Data     byte
+	Children [255]*node
 }
 
 func newNode(b byte, root ...bool) *node {
@@ -16,10 +17,15 @@ func newNode(b byte, root ...bool) *node {
 	if len(root) > 0 && root[0] {
 		isRoot = root[0]
 	}
-	return &node{
+	obj := &node{
 		IsRoot: isRoot,
 		Data:   b,
 	}
+
+	if isRoot {
+		obj.isNull = true // 根默认为 null
+	}
+	return obj
 }
 
 func (n *node) String() string {
@@ -38,14 +44,18 @@ func newTire() *tire {
 
 // insert 新增模式串
 func (t *tire) insert(bytes []byte) {
+	if t.null() { // 如果为空的话, 修改下标记
+		t.root.isNull = false
+	}
 	dataLen := len(bytes)
 	curNode := t.root
+	var b byte
 	for i := 0; i < dataLen; i++ {
-		b := bytes[i]
-		if node := curNode.ChildrenMap[b]; node == nil {
-			curNode.ChildrenMap[b] = newNode(b)
+		b = bytes[i]
+		if node := curNode.Children[b]; node == nil {
+			curNode.Children[b] = newNode(b)
 		}
-		curNode = curNode.ChildrenMap[b]
+		curNode = curNode.Children[b]
 	}
 	curNode.IsEnd = true
 }
@@ -54,9 +64,10 @@ func (t *tire) insert(bytes []byte) {
 func (t *tire) search(target []byte) bool {
 	dataLen := len(target)
 	curNode := t.root
+	var b byte
 	for i := 0; i < dataLen; i++ {
-		b := target[i]
-		if node := curNode.ChildrenMap[b]; node == nil {
+		b = target[i]
+		if node := curNode.Children[b]; node == nil {
 			if curNode.IsEnd { // 匹配
 				break
 			}
@@ -66,8 +77,13 @@ func (t *tire) search(target []byte) bool {
 			}
 			continue
 		}
-		curNode = curNode.ChildrenMap[b]
+		curNode = curNode.Children[b]
 	}
-	// fmt.Println(curNode)
+	// logger.Info(curNode)
 	return curNode.IsEnd
+}
+
+// null 是否为空
+func (t *tire) null() bool {
+	return t.root.isNull
 }

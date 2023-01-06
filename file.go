@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	saveOffsetDir = "/.pslog_offset" // 保存偏移量的文件目录
+	saveOffsetDir         = "/.pslog_offset" // 保存偏移量的文件目录
+	cleanOffsetFileDayDur = 1                // 清理偏移量文件变动多少天之前的文件
 )
 
 type FileInfo struct {
@@ -21,6 +22,11 @@ type FileInfo struct {
 	Name         string   // 文件名
 	offsetChange int32    // 记录 offset 变化次数
 	offset       int64    // 当前文件偏移量
+}
+
+// HandlerIsNil
+func (f *FileInfo) HandlerIsNil() bool {
+	return f.Handler == nil
 }
 
 // FileName 获取文件的全路径名
@@ -54,27 +60,15 @@ func (f *FileInfo) CleanNameFmt() string {
 	return f.Name[:tmpIndex]
 }
 
-// setOffset 保存 offset
-func (f *FileInfo) setOffset(offset int64) {
-	f.offset = offset
-
-	// 判断下是否需要持久化
-	if f.Handler.Change == -1 {
-		f.saveOffset()
-		return
-	}
-
-	f.offsetChange++
-	if f.offsetChange > f.Handler.Change {
-		f.saveOffset()
-		f.offsetChange = 0
-	}
+// offsetDir 保存偏移量文件的目录
+func (f *FileInfo) offsetDir() string {
+	return filepath.Join(f.Dir, saveOffsetDir)
 }
 
 // offsetFilename 获取保存文件偏移量的名称
 func (f *FileInfo) offsetFilename() string {
 	// 处理为 xxx/.pslog_offset/_xxx.txt
-	return filepath.Join(".", f.Dir, saveOffsetDir, "_"+f.CleanNameFmt()+".txt")
+	return filepath.Join(f.offsetDir(), "_"+f.CleanNameFmt()+".txt")
 }
 
 // initOffset 初始化文件 offset
@@ -96,10 +90,24 @@ func (f *FileInfo) initOffset() {
 
 // saveOffset 保存偏移量
 // 通过隐藏文件来保存
-func (f *FileInfo) saveOffset() {
+func (f *FileInfo) saveOffset(offset int64) {
 	filename := f.offsetFilename()
-	if _, err := f.putContent(filename, base.ToString(f.offset)); err != nil {
-		logger.Error("f.putContent is failed, err:", err)
+	// 判断下是否需要持久化
+	if f.Handler.Change == -1 {
+		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
+			logger.Error("f.putContent is failed, err:", err)
+		}
+		f.removeOffsetFile()
+		return
+	}
+
+	f.offsetChange++
+	if f.offsetChange > f.Handler.Change {
+		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
+			logger.Error("f.putContent is failed, err:", err)
+		}
+		f.removeOffsetFile()
+		f.offsetChange = 0
 	}
 }
 
@@ -126,4 +134,26 @@ func (f *FileInfo) putContent(path string, content string) (int, error) {
 	}
 	defer filePool.Put(fh)
 	return fh.PutContent(content)
+}
+
+// removeOffsetFile 移除保存文件偏移量的文件
+func (f *FileInfo) removeOffsetFile() {
+	// 移除当前目录下7天前的文件
+	offsetFiles, err := os.ReadDir(f.offsetDir())
+	if err != nil {
+		logger.Errorf("os.ReadDir %q is failed, err: %v", f.offsetDir(), err)
+		return
+	}
+	curTime := time.Now()
+	for _, offsetFile := range offsetFiles {
+		fileInfo, _ := offsetFile.Info()
+		if curTime.Sub(fileInfo.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
+			continue
+		}
+
+		delFilename := filepath.Join(f.offsetDir(), fileInfo.Name())
+		if err := os.Remove(delFilename); err != nil {
+			logger.Errorf("os.Remove %q is failed, err: %v", delFilename, err)
+		}
+	}
 }

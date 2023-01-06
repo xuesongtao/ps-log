@@ -33,8 +33,14 @@ func TestTrie(t *testing.T) {
 	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
 	// row := `[ERRO] 110.184`
 	tree := newTire()
+	if !tree.null() {
+		t.Error("null is no ok")
+	}
 	for _, tt := range tts {
 		tree.insert(tt)
+	}
+	if !tree.null() {
+		t.Error("null is no ok")
 	}
 
 	bb := []byte(row)

@@ -2,7 +2,6 @@ package pslog
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +14,7 @@ import (
 )
 
 var (
-	noHandlerErr = errors.New("tos is null, you call Register first")
+	noHandlerErr = errors.New("handler is null, you can call Register first")
 )
 
 // Opt
@@ -25,7 +24,16 @@ type Opt func(*PsLog)
 func WithAsync2Tos(poolSize int) Opt {
 	return func(pl *PsLog) {
 		pl.async2Tos = true
-		pl.taskPool = tl.NewTaskPool("parse log", poolSize)
+	}
+}
+
+// WithTaskPoolSize 设置协程池大小
+func WithTaskPoolSize(size int) Opt {
+	return func(pl *PsLog) {
+		if pl.taskPool != nil {
+			pl.taskPool.Close()
+		}
+		pl.taskPool = tl.NewTaskPool("parse log", size)
 	}
 }
 
@@ -35,7 +43,6 @@ type PsLog struct {
 	async2Tos bool // 是否异步处理 tos
 	closed    bool
 	rwMu      sync.RWMutex
-	buf       *bytes.Buffer        // 内容 buf
 	taskPool  *tl.TaskPool         // 任务池
 	handler   *Handler             // 处理部分
 	watch     *Watch               // 文件监听
@@ -47,9 +54,9 @@ type PsLog struct {
 // 注: 结束时需要调用 Close
 func NewPsLog(opts ...Opt) (*PsLog, error) {
 	obj := &PsLog{
-		buf:     new(bytes.Buffer),
-		logMap:  make(map[string]*FileInfo),
-		handler: new(Handler),
+		logMap:   make(map[string]*FileInfo),
+		handler:  new(Handler),
+		taskPool: tl.NewTaskPool("parse log", 10),
 	}
 
 	for _, opt := range opts {
@@ -67,6 +74,9 @@ func (p *PsLog) Register(handler *Handler) error {
 // AddPaths 添加 path, path 必须为文件全路径
 // 根据 PsLog.Handler 进行处理
 func (p *PsLog) AddPaths(paths ...string) error {
+	if p.handler == nil {
+		return noHandlerErr
+	}
 	path2HandlerMap := make(map[string]*Handler, len(paths))
 	for _, path := range paths {
 		path2HandlerMap[path] = p.handler
@@ -91,30 +101,25 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 			continue
 		}
 
-		// 全局处理器为空时, 文件对应的必须有
-		if p.handler == nil {
-			if err := handler.Valid(); err != nil {
-				return fmt.Errorf("%q handler is not ok, err: %v", path, err)
-			}
+		// 处理 handler
+		if handler == nil {
+			return fmt.Errorf("%q no has handler", path)
 		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return fmt.Errorf("os.Open %q is failed, err: %v", path, err)
+		if err := handler.Valid(); err != nil {
+			return fmt.Errorf("%q handler is not ok, err: %v", path, err)
 		}
+		handler.init()
 
-		st, err := f.Stat()
+		// 判断下是否为目录
+		st, err := os.Stat(path)
 		if err != nil {
 			return fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
 		}
-
 		if st.IsDir() {
-			return fmt.Errorf("path must log path, %q is dir", path)
+			return fmt.Errorf("%q is dir, it should file", path)
 		}
 
-		if handler.Change == 0 {
-			handler.Change = defaultHandleChange
-		}
+		// 保存 file
 		fileInfo := &FileInfo{Handler: handler}
 		fileInfo.Parse(path)
 		fileInfo.initOffset()
@@ -229,39 +234,44 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	}
 
 	// 逐行读取
-	defer p.buf.Reset()
 	rows := bufio.NewScanner(f)
+	readSize := fileInfo.offset
+	buf := newStrBuf(int(fileSize - readSize))
+	defer putStrBuf(buf)
 	for rows.Scan() {
-		rowStr := rows.Text()
-		if !p.need(rowStr) {
+		if readSize > fileSize-1 {
+			break
+		}
+		data := rows.Bytes()
+		readSize += int64(len(data))
+		if !p.need(fileInfo.Handler, data) {
 			continue
 		}
-		p.buf.WriteString(rowStr + "\n")
+		buf.WriteString(string(data) + "\n")
 	}
+	fileInfo.offset = fileSize
 
-	fileInfo.setOffset(fileSize)
-	p.writer(p.buf.Bytes())
+	// 异步处理
+	p.taskPool.Submit(func() {
+		// 存在 data race 可以不用管
+		fileInfo.saveOffset(fileSize)
+	})
+	p.writer(fileInfo.Handler, buf.Bytes())
 }
 
 // need 需要处理
-func (p *PsLog) need(row string) bool {
-	if row == "" {
-		return false
+func (p *PsLog) need(h *Handler, row []byte) bool {
+	if h.targetsTrie.null() {
+		return true
 	}
-
-	return true
+	return h.targetsTrie.search(row) && !h.excludesTrie.search(row)
 }
 
 // writer 写入目标, 默认同步处理
-func (p *PsLog) writer(buf []byte, handler ...*Handler) {
-	if len(p.handler.Tos) == 0 {
-		logger.Warning(noHandlerErr)
-		return
-	}
-
+func (p *PsLog) writer(handler *Handler, buf []byte) {
 	// 异步
 	if p.async2Tos {
-		for _, to := range p.handler.Tos {
+		for _, to := range handler.Tos {
 			p.taskPool.Submit(func() {
 				to.Write(buf)
 			})
@@ -270,7 +280,7 @@ func (p *PsLog) writer(buf []byte, handler ...*Handler) {
 	}
 
 	// 同步
-	for _, to := range p.handler.Tos {
+	for _, to := range handler.Tos {
 		to.Write(buf)
 	}
 }
