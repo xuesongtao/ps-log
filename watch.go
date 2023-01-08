@@ -114,7 +114,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 					continue
 				}
 
-				logger.Infof("filename: %q, op: %s", event.Name, event.Op.String())
+				// logger.Infof("filename: %q, op: %s", event.Name, event.Op.String())
 				watchFileInfo := w.getWatchFileInfo(event.Name)
 				if watchFileInfo == nil {
 					continue

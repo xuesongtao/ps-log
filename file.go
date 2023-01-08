@@ -68,7 +68,7 @@ func (f *FileInfo) offsetDir() string {
 // offsetFilename 获取保存文件偏移量的名称
 func (f *FileInfo) offsetFilename() string {
 	// 处理为 xxx/.pslog_offset/_xxx.txt
-	return filepath.Join(f.offsetDir(), "_"+f.CleanNameFmt()+".txt")
+	return filepath.Join(f.offsetDir(), "_"+f.Name+".txt")
 }
 
 // initOffset 初始化文件 offset

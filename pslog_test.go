@@ -2,7 +2,6 @@ package pslog
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"testing"
 	"time"
@@ -25,13 +24,20 @@ func TestTailSaveOffset(t *testing.T) {
 		Change:   -1,
 		Tail:     true,
 		ExpireAt: NoExpire,
-		Tos: []io.Writer{
-			os.Stdout,
+		Targets: []*Target{
+			{
+				Content:  "",
+				Excludes: []string{},
+				To:       os.Stdout,
+			},
 		},
-		Targets:  []string{},
-		Excludes: []string{}}
-	ps.Register(handler)
-	ps.AddPaths(tmp)
+	}
+	if err := ps.Register(handler); err != nil {
+		t.Fatal(err)
+	}
+	if err := ps.AddPaths(tmp); err != nil {
+		t.Fatal(err)
+	}
 
 	closeCh := make(chan struct{})
 	go func() {
@@ -43,7 +49,7 @@ func TestTailSaveOffset(t *testing.T) {
 		defer fh.Close()
 
 		f := fh.GetFile()
-		for i := 0; i < 30; i++ {
+		for i := 0; i < 10; i++ {
 			time.Sleep(time.Microsecond)
 			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
@@ -55,6 +61,6 @@ func TestTailSaveOffset(t *testing.T) {
 
 	for range closeCh {
 	}
+	time.Sleep(time.Second * 10)
 	ps.Close()
-	time.Sleep(time.Second * 5)
 }

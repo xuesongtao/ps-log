@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
+	"time"
 
 	"gitee.com/xuesongtao/gotool/xfile"
 	pslog "gitee.com/xuesongtao/ps-log"
@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	ps, err := pslog.NewPsLog()
+	ps, err := pslog.NewPsLog(pslog.WithAsync2Tos())
 	if err != nil {
 		panic(err)
 	}
@@ -25,11 +25,13 @@ func main() {
 		Change:   -1,
 		Tail:     true,
 		ExpireAt: pslog.NoExpire,
-		Tos: []io.Writer{
-			os.Stdout,
+		Targets: []*pslog.Target{
+			{
+				Content:  "",
+				Excludes: []string{},
+				To:       os.Stdout,
+			},
 		},
-		Targets:  []string{"1", "5"},
-		Excludes: []string{},
 	}
 	if err := ps.Register(handler); err != nil {
 		panic(err)
@@ -41,8 +43,8 @@ func main() {
 			return
 		}
 		f := fh.GetFile()
-		for i := 0; i < 10; i++ {
-			// time.Sleep(time.Second)
+		for i := 0; i < 30; i++ {
+			time.Sleep(time.Second)
 			// _, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			_, err := f.WriteString(fmt.Sprint(i) + "\n")
 			if err != nil {

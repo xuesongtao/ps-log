@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sync"
 
@@ -21,7 +22,7 @@ var (
 type Opt func(*PsLog)
 
 // WithAsync2Tos 异步处理 tos
-func WithAsync2Tos(poolSize int) Opt {
+func WithAsync2Tos() Opt {
 	return func(pl *PsLog) {
 		pl.async2Tos = true
 	}
@@ -39,7 +40,7 @@ func WithTaskPoolSize(size int) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail      bool // 是否实时
+	tail      bool // 是否需要实时分析
 	async2Tos bool // 是否异步处理 tos
 	closed    bool
 	rwMu      sync.RWMutex
@@ -47,7 +48,7 @@ type PsLog struct {
 	handler   *Handler             // 处理部分
 	watch     *Watch               // 文件监听
 	watchCh   chan *WatchFileInfo  // 文件监听文件内容
-	logMap    map[string]*FileInfo // 需要处理的 log, key: 文件路径
+	logMap    map[string]*FileInfo // 需要处理的 log, 不需要手动是否句柄, 通过 lru 进行淘汰, key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -56,7 +57,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	obj := &PsLog{
 		logMap:   make(map[string]*FileInfo),
 		handler:  new(Handler),
-		taskPool: tl.NewTaskPool("parse log", 10),
+		taskPool: tl.NewTaskPool("parse log", runtime.NumCPU()),
 	}
 
 	for _, opt := range opts {
@@ -142,13 +143,14 @@ func (p *PsLog) Close() {
 		return
 	}
 
+	if p.watch != nil {
+		p.watch.Close()
+	}
+
 	filePool.Close()
 
 	if p.taskPool != nil {
-		p.taskPool.Close()
-	}
-	if p.watch != nil {
-		p.watch.Close()
+		p.taskPool.SafeClose()
 	}
 
 	// close(p.watchCh) // p.watch.Close() 执行后, p.watchCh 会被关闭
@@ -222,8 +224,8 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	}
 
 	fileSize := st.Size()
-	logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
-	if fileSize == 0 || fileInfo.offset >= fileSize {
+	// logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	if fileSize == 0 || fileInfo.offset > fileSize {
 		return
 	}
 
@@ -236,58 +238,65 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	// 逐行读取
 	rows := bufio.NewScanner(f)
 	readSize := fileInfo.offset
-	buf := newStrBuf(int(fileSize - readSize))
-	defer putStrBuf(buf)
+	dataMap := make(map[int]*logHandler, 1<<6) // key: target.no
 	for rows.Scan() {
-		if readSize > fileSize-1 {
+		// 保证本次读取内容小于 fileSize
+		if readSize > fileSize {
 			break
 		}
 		data := rows.Bytes()
 		readSize += int64(len(data))
-		if !p.need(fileInfo.Handler, data) {
+		targe, ok := p.parse(fileInfo.Handler, data)
+		if !ok {
 			continue
 		}
-		buf.WriteString(string(data) + "\n")
+		if _, ok := dataMap[targe.no]; !ok {
+			dataMap[targe.no] = newLogHandler(targe.To)
+		}
+		dataMap[targe.no].msg.WriteString(string(data) + "\n")
 	}
-	fileInfo.offset = fileSize
+	p.writer(dataMap)
 
-	// 异步处理
+	// 保存偏移量
+	fileInfo.offset = fileSize
 	p.taskPool.Submit(func() {
-		// 存在 data race 可以不用管
 		fileInfo.saveOffset(fileSize)
 	})
-	p.writer(fileInfo.Handler, buf.Bytes())
 }
 
-// need 需要处理
-func (p *PsLog) need(h *Handler, row []byte) bool {
-	if h.targetsTrie.null() {
-		return true
+// parse 需要处理
+func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
+	if h.targets.null() {
+		return nil, false
 	}
-	return h.targetsTrie.search(row) && !h.excludesTrie.search(row)
+	target, ok := h.targets.getTarget(row)
+	if !ok {
+		return nil, false
+	}
+	return target, !target.excludes.search(row)
 }
 
 // writer 写入目标, 默认同步处理
-func (p *PsLog) writer(handler *Handler, buf []byte) {
+func (p *PsLog) writer(dataMap map[int]*logHandler) {
 	// 异步
 	if p.async2Tos {
-		for _, to := range handler.Tos {
+		for _, data := range dataMap {
 			p.taskPool.Submit(func() {
-				to.Write(buf)
+				data.w.Write(data.msg.Bytes())
 			})
 		}
 		return
 	}
 
 	// 同步
-	for _, to := range handler.Tos {
-		to.Write(buf)
+	for _, data := range dataMap {
+		data.w.Write(data.msg.Bytes())
 	}
 }
 
 func (p *PsLog) final() {
 	if err := recover(); err != nil {
-		logger.Error("recover err:", debug.Stack())
+		logger.Errorf("recover err: %v, stack: %s", err, debug.Stack())
 	}
 	p.Close()
 }

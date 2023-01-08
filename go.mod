@@ -2,7 +2,7 @@ module gitee.com/xuesongtao/ps-log
 
 go 1.17
 
-require gitee.com/xuesongtao/gotool v1.2.16
+require gitee.com/xuesongtao/gotool v1.2.17
 
 require (
 	gitee.com/xuesongtao/taskpool v1.2.3

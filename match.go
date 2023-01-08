@@ -10,6 +10,7 @@ type node struct {
 	IsEnd    bool
 	Data     byte
 	Children [255]*node
+	Target   *Target
 }
 
 func newNode(b byte, root ...bool) *node {
@@ -43,7 +44,7 @@ func newTire() *tire {
 }
 
 // insert 新增模式串
-func (t *tire) insert(bytes []byte) {
+func (t *tire) insert(bytes []byte, target ...*Target) {
 	if t.null() { // 如果为空的话, 修改下标记
 		t.root.isNull = false
 	}
@@ -58,10 +59,24 @@ func (t *tire) insert(bytes []byte) {
 		curNode = curNode.Children[b]
 	}
 	curNode.IsEnd = true
+	if len(target) > 0 {
+		curNode.Target = target[0]
+	}
 }
 
 // search 查询主串
 func (t *tire) search(target []byte) bool {
+	node := t.searchNode(target)
+	return node.IsEnd
+}
+
+// getTarget 获取 target
+func (t *tire) getTarget(target []byte) (*Target, bool) {
+	node := t.searchNode(target)
+	return node.Target, node.IsEnd && node.Target != nil
+}
+
+func (t *tire) searchNode(target []byte) *node {
 	dataLen := len(target)
 	curNode := t.root
 	var b byte
@@ -80,7 +95,7 @@ func (t *tire) search(target []byte) bool {
 		curNode = curNode.Children[b]
 	}
 	// logger.Info(curNode)
-	return curNode.IsEnd
+	return curNode
 }
 
 // null 是否为空
