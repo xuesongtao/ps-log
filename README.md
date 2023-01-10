@@ -43,9 +43,11 @@ func main() {
    },
   },
  }
+
  if err := ps.Register(handler); err != nil {
   panic(err)
  }
+ 
  closeCh := make(chan int)
  go func() {
   fh := xfile.NewFileHandle("log/test.log")
