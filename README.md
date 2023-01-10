@@ -47,7 +47,7 @@ func main() {
  if err := ps.Register(handler); err != nil {
   panic(err)
  }
- 
+
  closeCh := make(chan int)
  go func() {
   fh := xfile.NewFileHandle("log/test.log")
@@ -139,3 +139,6 @@ stopFor:
  fmt.Println("end...")
 }
 ```
+
+#### 其他
+- 欢迎大佬们指正, 希望大佬给❤️，to gitee
