@@ -32,9 +32,6 @@ func WithAsync2Tos() Opt {
 // WithTaskPoolSize 设置协程池大小
 func WithTaskPoolSize(size int) Opt {
 	return func(pl *PsLog) {
-		if pl.taskPool != nil {
-			pl.taskPool.Close()
-		}
 		pl.taskPool = tl.NewTaskPool("parse log", size)
 	}
 }
@@ -73,10 +70,9 @@ type PsLog struct {
 // 注: 结束时需要调用 Close
 func NewPsLog(opts ...Opt) (*PsLog, error) {
 	obj := &PsLog{
-		logMap:   make(map[string]*FileInfo),
-		handler:  new(Handler),
-		taskPool: tl.NewTaskPool("parse log", runtime.NumCPU()),
-		closeCh:  make(chan struct{}, 1),
+		logMap:  make(map[string]*FileInfo),
+		handler: new(Handler),
+		closeCh: make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
@@ -85,6 +81,10 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 
 	if obj.cleanUpTime == 0 {
 		obj.cleanUpTime = time.Hour
+	}
+
+	if obj.taskPool == nil {
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU())
 	}
 
 	go obj.sentry()
