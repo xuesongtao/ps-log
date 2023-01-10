@@ -137,7 +137,13 @@ func (f *FileInfo) putContent(path string, content string) (int, error) {
 }
 
 // removeOffsetFile 移除保存文件偏移量的文件
-func (f *FileInfo) removeOffsetFile() {
+func (f *FileInfo) removeOffsetFile(filename ...string) {
+	if len(filename) > 0 && filename[0] != "" {
+		if err := os.Remove(filename[0]); err != nil {
+			logger.Errorf("os.Remove %q is failed, err: %v", filename[0], err)
+		}
+		return
+	}
 	// 移除当前目录下7天前的文件
 	offsetFiles, err := os.ReadDir(f.offsetDir())
 	if err != nil {

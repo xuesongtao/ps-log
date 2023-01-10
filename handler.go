@@ -10,11 +10,11 @@ import (
 
 // Target 目标内容
 type Target struct {
-	no       int       // 自增编号
-	Content  string    // 目标内容
-	Excludes []string  // 排除 msg
-	excludes *tire     // tire 树
-	To       io.Writer // 处理
+	no       int         // 自增编号
+	Content  string      // 目标内容
+	Excludes []string    // 排除 msg
+	excludes *tire       // tire 树
+	To       []io.Writer // 处理
 }
 
 // Handler 处理的部分
@@ -31,15 +31,18 @@ func (h *Handler) Valid() error {
 		return errors.New("ExpireAt is required")
 	}
 
-	for _, target := range h.Targets {
-		if target.Content != "" && target.To == nil {
-			return fmt.Errorf("%q To is null", target.Content)
+	for i, target := range h.Targets {
+		if target.Content == "" {
+			return fmt.Errorf("Targets.Content[%d] is null", i)
+		}
+		if target.To == nil {
+			return fmt.Errorf("%q[%d] To is null", target.Content, i)
 		}
 	}
 
-	// if len(h.Targets) == 0 {
-	// 	return errors.New("Targets is required")
-	// }
+	if len(h.Targets) == 0 {
+		return errors.New("Targets is required")
+	}
 	return nil
 }
 
@@ -52,10 +55,16 @@ func (h *Handler) init() {
 	h.targets = newTire()
 	no := 1
 	for _, target := range h.Targets {
+		if target.Content == "" {
+			continue
+		}
 		target.no = no
 		h.targets.insert([]byte(target.Content), target)
 		target.excludes = newTire()
 		for _, exclude := range target.Excludes {
+			if exclude == "" {
+				continue
+			}
 			target.excludes.insert([]byte(exclude), nil)
 		}
 		no++
@@ -65,9 +74,9 @@ func (h *Handler) init() {
 // logHandler 解析到的内容
 type logHandler struct {
 	msg *bytes.Buffer
-	w   io.Writer
+	tos []io.Writer
 }
 
-func newLogHandler(w io.Writer) *logHandler {
-	return &logHandler{msg: new(bytes.Buffer), w: w}
+func newLogHandler(tos []io.Writer) *logHandler {
+	return &logHandler{msg: new(bytes.Buffer), tos: tos}
 }

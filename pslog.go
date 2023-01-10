@@ -38,17 +38,24 @@ func WithTaskPoolSize(size int) Opt {
 	}
 }
 
+func WithPreCleanOffset() Opt {
+	return func(pl *PsLog) {
+		pl.preCleanOffset = true
+	}
+}
+
 // PsLog 解析 log
 type PsLog struct {
-	tail      bool // 是否需要实时分析
-	async2Tos bool // 是否异步处理 tos
-	closed    bool
-	rwMu      sync.RWMutex
-	taskPool  *tl.TaskPool         // 任务池
-	handler   *Handler             // 处理部分
-	watch     *Watch               // 文件监听
-	watchCh   chan *WatchFileInfo  // 文件监听文件内容
-	logMap    map[string]*FileInfo // 需要处理的 log, 不需要手动是否句柄, 通过 lru 进行淘汰, key: 文件路径
+	tail           bool // 是否需要实时分析
+	async2Tos      bool // 是否异步处理 tos
+	closed         bool
+	preCleanOffset bool // 是否需要先清理已经保存的 offset
+	rwMu           sync.RWMutex
+	taskPool       *tl.TaskPool         // 任务池
+	handler        *Handler             // 处理部分
+	watch          *Watch               // 文件监听
+	watchCh        chan *WatchFileInfo  // 文件监听文件内容
+	logMap         map[string]*FileInfo // 需要处理的 log, 不需要手动是否句柄, 通过 lru 进行淘汰, key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -204,11 +211,22 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 
 // cronLog 定时解析 log
 func (p *PsLog) CronLogs() {
+	p.rwMu.RLock()
+	tmpLogMap := p.logMap
+	p.rwMu.RUnlock()
 
+	for _, fileInfo := range tmpLogMap {
+		if fileInfo.Handler.Tail { // 跳过实时监听的
+			continue
+		}
+		p.parseLog(fileInfo)
+	}
 }
 
 // parseLog 解析文件
 func (p *PsLog) parseLog(fileInfo *FileInfo) {
+	// 先处理下是否需要清理 offset
+	p.cleanOffset(fileInfo)
 	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
 	if err != nil {
 		logger.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
@@ -264,6 +282,15 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	})
 }
 
+// cleanOffset 清理已保存的 offset
+func (p *PsLog) cleanOffset(fileInfo *FileInfo) {
+	if p.preCleanOffset {
+		fileInfo.offset = 0
+		fileInfo.putContent(fileInfo.offsetFilename(), "0")
+		p.preCleanOffset = false
+	}
+}
+
 // parse 需要处理
 func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 	if h.targets.null() {
@@ -278,19 +305,24 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*logHandler) {
+	// logger.Infof("dataMap: %+v", dataMap)
 	// 异步
 	if p.async2Tos {
 		for _, data := range dataMap {
-			p.taskPool.Submit(func() {
-				data.w.Write(data.msg.Bytes())
-			})
+			for _, to := range data.tos {
+				p.taskPool.Submit(func() {
+					to.Write(data.msg.Bytes())
+				})
+			}
 		}
 		return
 	}
 
 	// 同步
 	for _, data := range dataMap {
-		data.w.Write(data.msg.Bytes())
+		for _, to := range data.tos {
+			to.Write(data.msg.Bytes())
+		}
 	}
 }
 
