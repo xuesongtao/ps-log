@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	tl "gitee.com/xuesongtao/taskpool"
 )
@@ -51,10 +52,11 @@ type PsLog struct {
 	closed         bool
 	preCleanOffset bool // 是否需要先清理已经保存的 offset
 	rwMu           sync.RWMutex
-	taskPool       *tl.TaskPool         // 任务池
-	handler        *Handler             // 处理部分
-	watch          *Watch               // 文件监听
-	watchCh        chan *WatchFileInfo  // 文件监听文件内容
+	taskPool       *tl.TaskPool        // 任务池
+	handler        *Handler            // 处理部分
+	watch          *Watch              // 文件监听
+	watchCh        chan *WatchFileInfo // 文件监听文件内容
+	closeCh        chan struct{}
 	logMap         map[string]*FileInfo // 需要处理的 log, 不需要手动是否句柄, 通过 lru 进行淘汰, key: 文件路径
 }
 
@@ -65,11 +67,14 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 		logMap:   make(map[string]*FileInfo),
 		handler:  new(Handler),
 		taskPool: tl.NewTaskPool("parse log", runtime.NumCPU()),
+		closeCh:  make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
 		opt(obj)
 	}
+
+	go obj.sentry()
 	return obj, nil
 }
 
@@ -161,6 +166,7 @@ func (p *PsLog) Close() {
 	}
 
 	// close(p.watchCh) // p.watch.Close() 执行后, p.watchCh 会被关闭
+	close(p.closeCh)
 	p.closed = true
 }
 
@@ -331,4 +337,49 @@ func (p *PsLog) final() {
 		logger.Errorf("recover err: %v, stack: %s", err, debug.Stack())
 	}
 	p.Close()
+}
+
+func (p *PsLog) sentry() {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case t, ok := <-ticker.C:
+			if !ok {
+				return
+			}
+			p.cleanUp(t)
+		case <-p.closeCh:
+			logger.Info("ps-log sentry is close")
+			return
+		}
+	}
+}
+
+func (p *PsLog) cleanUp(t time.Time) {
+	tmpLogMap := p.cloneLogMap()
+	deleteKeys := make([]string, 0, len(tmpLogMap))
+	for path, fileInfo := range tmpLogMap {
+		if fileInfo.IsExpire(t) {
+			deleteKeys = append(deleteKeys, path)
+		}
+	}
+	for _, path := range deleteKeys {
+		delete(tmpLogMap, path)
+	}
+
+	p.rwMu.Lock()
+	p.logMap = tmpLogMap
+	p.rwMu.Unlock()
+}
+
+func (p *PsLog) cloneLogMap() map[string]*FileInfo {
+	p.rwMu.RLock()
+	tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
+	for k, v := range p.logMap {
+		tmpLogMap[k] = v
+	}
+	p.rwMu.RUnlock()
+	return tmpLogMap
 }
