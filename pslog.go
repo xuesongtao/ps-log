@@ -287,10 +287,11 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		if !ok {
 			continue
 		}
-		if _, ok := dataMap[targe.no]; !ok {
+		if handler, ok := dataMap[targe.no]; !ok {
 			dataMap[targe.no] = newLogHandler(targe.To)
+		} else {
+			handler.msg.WriteString(string(data) + "\n")
 		}
-		dataMap[targe.no].msg.WriteString(string(data) + "\n")
 	}
 	p.writer(dataMap)
 
