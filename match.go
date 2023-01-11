@@ -9,7 +9,8 @@ type node struct {
 	IsRoot   bool
 	IsEnd    bool
 	Data     byte
-	Children [255]*node // TODO 待优化
+	// Children [255]*node // TODO 待优化
+	Children map[byte]*node // TODO 待优化
 	Target   *Target
 }
 
@@ -21,6 +22,7 @@ func newNode(b byte, root ...bool) *node {
 	obj := &node{
 		IsRoot: isRoot,
 		Data:   b,
+		Children: make(map[byte]*node),
 	}
 
 	if isRoot {

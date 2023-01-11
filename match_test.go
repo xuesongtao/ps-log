@@ -2,6 +2,8 @@ package pslog
 
 import (
 	"bytes"
+	"fmt"
+	"runtime"
 	"testing"
 )
 
@@ -17,6 +19,7 @@ var (
 		[]byte("a ERRO"),
 		[]byte("ERRO a b"),
 		[]byte("b a ERRO"),
+		[]byte("110.184.137.102"),
 	}
 )
 
@@ -27,6 +30,15 @@ func contains(by []byte) bool {
 		}
 	}
 	return false
+}
+
+func TestArraySize(t *testing.T) {
+	tree := newTire()
+	for i, tt := range tts {
+		printMemStats(fmt.Sprintf("第%d次分配", i))
+		tree.insert(tt)
+	}
+	
 }
 
 func TestTrie(t *testing.T) {
@@ -50,6 +62,12 @@ func TestTrie(t *testing.T) {
 	}
 }
 
+func printMemStats(mag string) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	fmt.Printf("%v：memory = %vKB, total = %vKB GC Times = %v\n", mag, m.Alloc/1024, m.TotalAlloc/1024, m.NumGC)
+}
+
 func BenchmarkMatchForTire(b *testing.B) {
 	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
 	tree := newTire()
@@ -61,6 +79,8 @@ func BenchmarkMatchForTire(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		tree.search(by)
 	}
+	// b.ResetTimer()
+	printMemStats("test")
 }
 
 func BenchmarkMatchForContains(b *testing.B) {
