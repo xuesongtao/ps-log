@@ -39,7 +39,7 @@ func TestTrie(t *testing.T) {
 	for _, tt := range tts {
 		tree.insert(tt)
 	}
-	if !tree.null() {
+	if tree.null() {
 		t.Error("null is no ok")
 	}
 
