@@ -75,4 +75,4 @@ func main() {
 ```
 
 #### 其他
-- 欢迎大佬们指正, 希望大佬给❤️，[to gitee](https://gitee.com/xuesongtao/ps-log.git)
+- 欢迎大佬们指正, 希望大佬给❤️，[to gitee](https://gitee.com/xuesongtao/ps-log.git), [to github](https://github.com/xuesongtao/ps-log.git)
