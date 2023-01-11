@@ -9,7 +9,7 @@ type node struct {
 	IsRoot   bool
 	IsEnd    bool
 	Data     byte
-	Children [255]*node
+	Children [255]*node // TODO 待优化
 	Target   *Target
 }
 
