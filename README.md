@@ -11,7 +11,7 @@
 
 #### 介绍
 
-```
+```go
 go get -u gitee.com/xuesongtao/ps-log
 ```
 
