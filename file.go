@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	saveOffsetDir         = "/.pslog_offset" // 保存偏移量的文件目录
-	cleanOffsetFileDayDur = 1                // 清理偏移量文件变动多少天之前的文件
+	saveOffsetDir         = ".pslog" // 保存偏移量的文件目录
+	cleanOffsetFileDayDur = 1        // 清理偏移量文件变动多少天之前的文件
 )
 
 type FileInfo struct {
@@ -67,21 +67,21 @@ func (f *FileInfo) offsetDir() string {
 
 // offsetFilename 获取保存文件偏移量的名称
 func (f *FileInfo) offsetFilename() string {
-	// 处理为 xxx/.pslog_offset/_xxx.txt
-	return filepath.Join(f.offsetDir(), "_"+f.Name+".txt")
+	// 处理为 xxx/.pslog/offset/_xxx.log.txt
+	return filepath.Join(f.offsetDir(), "offset", "_"+f.Name+".txt")
 }
 
 // initOffset 初始化文件 offset
 func (f *FileInfo) initOffset() {
+	// 需要判断下是否已处理过
 	if f.offset > 0 {
 		return
 	}
 
-	// 需要判断下是否已处理过
 	filename := f.offsetFilename()
 	offset, err := f.getContent(filename)
 	if err != nil {
-		logger.Errorf("f.getContent %q is failed, err: %v", filename, err)
+		plg.Errorf("f.getContent %q is failed, err: %v", filename, err)
 		return
 	}
 	offsetInt, _ := strconv.Atoi(offset)
@@ -95,7 +95,7 @@ func (f *FileInfo) saveOffset(offset int64) {
 	// 判断下是否需要持久化
 	if f.Handler.Change == -1 {
 		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
-			logger.Error("f.putContent is failed, err:", err)
+			plg.Error("f.putContent is failed, err:", err)
 		}
 		f.removeOffsetFile()
 		return
@@ -104,7 +104,7 @@ func (f *FileInfo) saveOffset(offset int64) {
 	f.offsetChange++
 	if f.offsetChange > f.Handler.Change {
 		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
-			logger.Error("f.putContent is failed, err:", err)
+			plg.Error("f.putContent is failed, err:", err)
 		}
 		f.removeOffsetFile()
 		f.offsetChange = 0
@@ -140,14 +140,14 @@ func (f *FileInfo) putContent(path string, content string) (int, error) {
 func (f *FileInfo) removeOffsetFile(filename ...string) {
 	if len(filename) > 0 && filename[0] != "" {
 		if err := os.Remove(filename[0]); err != nil {
-			logger.Errorf("os.Remove %q is failed, err: %v", filename[0], err)
+			plg.Errorf("os.Remove %q is failed, err: %v", filename[0], err)
 		}
 		return
 	}
 	// 移除当前目录下7天前的文件
 	offsetFiles, err := os.ReadDir(f.offsetDir())
 	if err != nil {
-		logger.Errorf("os.ReadDir %q is failed, err: %v", f.offsetDir(), err)
+		plg.Errorf("os.ReadDir %q is failed, err: %v", f.offsetDir(), err)
 		return
 	}
 	curTime := time.Now()
@@ -159,7 +159,7 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 
 		delFilename := filepath.Join(f.offsetDir(), fileInfo.Name())
 		if err := os.Remove(delFilename); err != nil {
-			logger.Errorf("os.Remove %q is failed, err: %v", delFilename, err)
+			plg.Errorf("os.Remove %q is failed, err: %v", delFilename, err)
 		}
 	}
 }

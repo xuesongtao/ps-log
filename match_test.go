@@ -33,13 +33,18 @@ func contains(by []byte) bool {
 	return false
 }
 
-func TestArraySize(t *testing.T) {
+func TestTireMem(t *testing.T) {
 	tree := newTire()
 	for i, tt := range tts {
 		printMemStats(fmt.Sprintf("第%d次分配", i))
 		tree.insert(tt)
 	}
-
+	// var arr [255]*node
+	// for _, v := range arr {
+	// 	tv := reflect.ValueOf(&v)
+	// 	t.Log(tv.Type().Size())
+	// }
+	printMemStats("")
 }
 
 func TestTrie(t *testing.T) {
@@ -91,4 +96,5 @@ func BenchmarkMatchForContains(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		contains(by)
 	}
+	printMemStats("test")
 }

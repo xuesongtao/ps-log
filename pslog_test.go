@@ -11,7 +11,6 @@ import (
 
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
-	"gitee.com/xuesongtao/xlog"
 )
 
 var (
@@ -45,7 +44,7 @@ func TestTail(t *testing.T) {
 	go func() {
 		fh := xfile.NewFileHandle(tmp)
 		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
-			xlog.Error(err)
+			plg.Error(err)
 			return
 		}
 		defer fh.Close()
@@ -55,7 +54,7 @@ func TestTail(t *testing.T) {
 			// time.Sleep(time.Microsecond)
 			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
-				xlog.Error("write err:", err)
+				plg.Error("write err:", err)
 			}
 		}
 		time.Sleep(time.Second * 2)
@@ -88,7 +87,7 @@ func TestCron(t *testing.T) {
 	byteBuf := new(bytes.Buffer)
 	tmp := tmpDir + "/test2cron.log"
 	handler := &Handler{
-		Change:   -1,       // 每次都持久化 offset
+		Change: -1, // 每次都持久化 offset
 		// Tail:     true,     // 实时监听
 		ExpireAt: NoExpire, // 文件句柄不过期
 		Targets: []*Target{
@@ -110,7 +109,7 @@ func TestCron(t *testing.T) {
 	go func() {
 		fh := xfile.NewFileHandle(tmp)
 		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
-			xlog.Error(err)
+			plg.Error(err)
 			return
 		}
 		defer fh.Close()
@@ -120,7 +119,7 @@ func TestCron(t *testing.T) {
 			// time.Sleep(time.Microsecond)
 			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
-				xlog.Error("write err:", err)
+				plg.Error("write err:", err)
 			}
 		}
 		time.Sleep(time.Second * 5)
@@ -150,4 +149,3 @@ stopFor:
 		t.Error("strBuf:", strBuf.String())
 	}
 }
-

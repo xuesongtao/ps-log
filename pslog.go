@@ -32,7 +32,7 @@ func WithAsync2Tos() Opt {
 // WithTaskPoolSize 设置协程池大小
 func WithTaskPoolSize(size int) Opt {
 	return func(pl *PsLog) {
-		pl.taskPool = tl.NewTaskPool("parse log", size)
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg))
 	}
 }
 
@@ -84,7 +84,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU())
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg))
 	}
 
 	go obj.sentry()
@@ -214,16 +214,16 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 			fileInfo, ok := p.logMap[watchInfo.Path]
 			p.rwMu.RUnlock()
 			if !ok {
-				logger.Infof("%q is not exist", watchInfo.Path)
+				plg.Infof("%q is not exist", watchInfo.Path)
 				continue
 			}
 			if !fileInfo.Handler.Tail {
-				logger.Infof("%q no need tail", watchInfo.Path)
+				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
 			}
 			p.parseLog(fileInfo) // 防止在解析的时候, fileInfo 变化
 		}
-		logger.Info("watchCh is closed")
+		plg.Info("watchCh is closed")
 	}()
 	return nil
 }
@@ -248,7 +248,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	p.cleanOffset(fileInfo)
 	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
 	if err != nil {
-		logger.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
+		plg.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
 		return
 	}
 	defer filePool.Put(fh)
@@ -256,19 +256,19 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	f := fh.GetFile()
 	st, err := f.Stat()
 	if err != nil {
-		logger.Error("f.Stat %q is failed, err: %v", fileInfo.FileName(), err)
+		plg.Error("f.Stat %q is failed, err: %v", fileInfo.FileName(), err)
 		return
 	}
 
 	fileSize := st.Size()
-	// logger.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
 	if fileSize == 0 || fileInfo.offset > fileSize {
 		return
 	}
 
 	_, err = f.Seek(fileInfo.offset, io.SeekStart)
 	if err != nil {
-		logger.Error("f.Seek is failed, err:", err)
+		plg.Error("f.Seek is failed, err:", err)
 		return
 	}
 
@@ -325,7 +325,7 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*logHandler) {
-	// logger.Infof("dataMap: %+v", dataMap)
+	// plg.Infof("dataMap: %+v", dataMap)
 	// 异步
 	if p.async2Tos {
 		for _, data := range dataMap {
@@ -348,7 +348,7 @@ func (p *PsLog) writer(dataMap map[int]*logHandler) {
 
 func (p *PsLog) final() {
 	if err := recover(); err != nil {
-		logger.Errorf("recover err: %v, stack: %s", err, debug.Stack())
+		plg.Errorf("recover err: %v, stack: %s", err, debug.Stack())
 	}
 	p.Close()
 }
@@ -368,7 +368,7 @@ func (p *PsLog) sentry() {
 			}
 			p.cleanUp(t)
 		case <-p.closeCh:
-			logger.Info("ps-log sentry is close")
+			plg.Info("ps-log sentry is close")
 			return
 		}
 	}

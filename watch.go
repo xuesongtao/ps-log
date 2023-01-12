@@ -91,7 +91,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 			w.watcher.Close()
 			close(busCh)
 			if err := recover(); err != nil {
-				logger.Error("recover err:", debug.Stack())
+				plg.Error("recover err:", debug.Stack())
 			}
 		}()
 
@@ -99,13 +99,13 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 			select {
 			case err, ok := <-w.watcher.Errors:
 				if !ok {
-					logger.Info("err channel is closed")
+					plg.Info("err channel is closed")
 					return
 				}
-				logger.Error("watch err:", err)
+				plg.Error("watch err:", err)
 			case event, ok := <-w.watcher.Events:
 				if !ok {
-					logger.Info("event channel is closed")
+					plg.Info("event channel is closed")
 					return
 				}
 
@@ -114,7 +114,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 					continue
 				}
 
-				// logger.Infof("filename: %q, op: %s", event.Name, event.Op.String())
+				// plg.Infof("filename: %q, op: %s", event.Name, event.Op.String())
 				watchFileInfo := w.getWatchFileInfo(event.Name)
 				if watchFileInfo == nil {
 					continue

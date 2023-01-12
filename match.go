@@ -94,7 +94,7 @@ func (t *tire) searchNode(target []byte) *node {
 		}
 		curNode = curNode.Children[b]
 	}
-	// logger.Info(curNode)
+	// plg.Info(curNode)
 	return curNode
 }
 

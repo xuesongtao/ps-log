@@ -11,7 +11,7 @@ func TestWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := w.Add("./tmp/test.log"); err != nil {
+	if err := w.Add("./tmp/test2tail.log"); err != nil {
 		t.Fatal(err)
 	}
 
