@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
 	pslog "gitee.com/xuesongtao/ps-log"
-	"gitee.com/xuesongtao/xlog"
 )
 
 func main() {
@@ -37,7 +37,7 @@ func main() {
 	go func() {
 		fh := xfile.NewFileHandle(tmp)
 		if err := fh.Initf(os.O_RDWR | os.O_APPEND | os.O_TRUNC); err != nil {
-			xlog.Error(err)
+			log.Println(err)
 			return
 		}
 		defer fh.Close()
@@ -46,7 +46,7 @@ func main() {
 			// time.Sleep(time.Microsecond)
 			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
-				xlog.Error("write err:", err)
+				log.Println("write err:", err)
 			}
 		}
 

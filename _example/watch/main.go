@@ -4,13 +4,12 @@ import (
 	"fmt"
 
 	pslog "gitee.com/xuesongtao/ps-log"
-	"gitee.com/xuesongtao/xlog"
 )
 
 func main() {
 	w, err := pslog.NewWatch()
 	if err != nil {
-		xlog.Panic(err)
+		panic(err)
 	}
 	defer w.Close()
 
