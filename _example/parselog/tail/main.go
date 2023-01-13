@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -32,7 +31,7 @@ func main() {
 			{
 				Content:  " ",
 				Excludes: []string{},
-				To:       []io.Writer{os.Stdout},
+				To:       []pslog.PsLogWriter{&pslog.Stdout{}},
 			},
 		},
 	}
