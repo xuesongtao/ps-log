@@ -52,7 +52,7 @@ func NewLogPath() *LogPath {
 	}
 }
 
-// ParseSrc 收集 src 下的 go 项目, 注意: src 必须为绝对路径, 如: []string{"demo_dev#/root/demo/src"}
+// ParseSrc 收集 src 下的 go 项目, 注意: src.SrcPath 必须为绝对路径
 // src 目录即为项目根目录, 目录结构如下:
 //
 // src
