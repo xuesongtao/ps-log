@@ -19,8 +19,7 @@ go get -u gitee.com/xuesongtao/ps-log
 2. 支持 log `行内容` 多个匹配规则, 匹配的内容支持不同的处理方式(支持同步/异步处理)
 3. 采用文件池将频繁使用的句柄进行缓存, 采用 `tire` 树缓存匹配规则提高匹配效率
 
-#### 流程图
-
+![简易流程图](https://gitee.com/xuesongtao/ps-log/raw/master/ps-log.png)
 
 #### 使用
 
