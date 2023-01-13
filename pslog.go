@@ -79,6 +79,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 		opt(obj)
 	}
 
+	// 默认一小时清理 logMap 里过期的路径
 	if obj.cleanUpTime == 0 {
 		obj.cleanUpTime = time.Hour
 	}
