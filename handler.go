@@ -4,26 +4,37 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
+	"os"
 	"time"
 )
 
+type PsLogWriter interface {
+	WriteTo(bus *LogHandlerBus)
+}
+
+type Stdout struct{}
+
+func (p *Stdout) WriteTo(bus *LogHandlerBus) {
+	os.Stdout.WriteString(bus.Msg)
+}
+
 // Target 目标内容
 type Target struct {
-	no       int         // 自增编号
-	Content  string      // 目标内容
-	Excludes []string    // 排除 msg
-	excludes *tire       // tire 树
-	To       []io.Writer // 处理
+	no       int           // 自增编号
+	Content  string        // 目标内容
+	Excludes []string      // 排除 msg
+	excludes *tire         // tire 树
+	To       []PsLogWriter // 处理
 }
 
 // Handler 处理的部分
 type Handler struct {
-	Tail     bool      // 是否实时处理, 说明: true 为实时; false 需要外部定时调用
-	Change   int32     // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
-	ExpireAt time.Time // 文件句柄过期时间, 如: 2022-12-03 11:11:10
-	targets  *tire     // tire 树
-	Targets  []*Target // 目标 msg
+	Tail      bool          // 是否实时处理, 说明: true 为实时; false 需要外部定时调用
+	Change    int32         // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
+	ExpireDur time.Duration // 文件句柄过期间隔, 常用于全局配置
+	ExpireAt  time.Time     // 文件句柄过期时间, 优先 ExpireDur 如: 2022-12-03 11:11:10
+	targets   *tire         // tire 树
+	Targets   []*Target     // 目标 msg
 }
 
 func (h *Handler) Valid() error {
@@ -72,11 +83,22 @@ func (h *Handler) init() {
 }
 
 // logHandler 解析到的内容
-type logHandler struct {
-	msg *bytes.Buffer
-	tos []io.Writer
+type LogHandlerBus struct {
+	LogPath string
+	Msg     string
+
+	buf *bytes.Buffer
+	tos []PsLogWriter
 }
 
-func newLogHandler(tos []io.Writer) *logHandler {
-	return &logHandler{msg: new(bytes.Buffer), tos: tos}
+func (l *LogHandlerBus) initMsg() {
+	l.Msg = l.buf.String()
+	l.buf.Reset()
+}
+
+func (l *LogHandlerBus) Reset() {
+	l.LogPath = ""
+	l.Msg = ""
+	l.buf.Reset()
+	l.tos = nil
 }

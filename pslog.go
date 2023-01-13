@@ -2,6 +2,7 @@ package pslog
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -99,7 +100,7 @@ func (p *PsLog) Register(handler *Handler) error {
 }
 
 // AddPaths 添加 path, path 必须为文件全路径
-// 根据 PsLog.Handler 进行处理
+// 根据 p.handler 进行处理
 func (p *PsLog) AddPaths(paths ...string) error {
 	if p.handler == nil {
 		return noHandlerErr
@@ -111,8 +112,14 @@ func (p *PsLog) AddPaths(paths ...string) error {
 	return p.addLogPath(path2HandlerMap)
 }
 
+// AddPath2Handler 单个添加
+// 会根据文件对应的 Handler 进行处理, 如果为 Handler 为 nil, 会按 p.handler 来处理
+func (p *PsLog) AddPath2Handler(path string, handler *Handler) error {
+	return p.addLogPath(map[string]*Handler{path: handler})
+}
+
 // AddPath2HandlerMap 添加文件对应的处理方法
-// 只会根据文件对应的 Handler 进行处理
+// 会根据文件对应的 Handler 进行处理, 如果为 Handler 为 nil, 会按 p.handler 来处理
 func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 	return p.addLogPath(path2HandlerMap)
 }
@@ -130,7 +137,11 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 
 		// 处理 handler
 		if handler == nil {
-			return fmt.Errorf("%q no has handler", path)
+			if p.handler != nil {
+				handler = p.handler
+			} else {
+				return fmt.Errorf("%q no has handler", path)
+			}
 		}
 		if err := handler.Valid(); err != nil {
 			return fmt.Errorf("%q handler is not ok, err: %v", path, err)
@@ -276,7 +287,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	// 逐行读取
 	rows := bufio.NewScanner(f)
 	readSize := fileInfo.offset
-	dataMap := make(map[int]*logHandler, 1<<6) // key: target.no
+	dataMap := make(map[int]*LogHandlerBus, 1<<6) // key: target.no
 	for rows.Scan() {
 		// 保证本次读取内容小于 fileSize
 		if readSize > fileSize {
@@ -289,9 +300,9 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 			continue
 		}
 		if handler, ok := dataMap[targe.no]; !ok {
-			dataMap[targe.no] = newLogHandler(targe.To)
+			dataMap[targe.no] = &LogHandlerBus{LogPath: fileInfo.FileName(), buf: new(bytes.Buffer), tos: targe.To}
 		} else {
-			handler.msg.WriteString(string(data) + "\n")
+			handler.buf.WriteString(string(data) + "\n")
 		}
 	}
 	p.writer(dataMap)
@@ -325,24 +336,18 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 }
 
 // writer 写入目标, 默认同步处理
-func (p *PsLog) writer(dataMap map[int]*logHandler) {
+func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 	// plg.Infof("dataMap: %+v", dataMap)
-	// 异步
-	if p.async2Tos {
-		for _, data := range dataMap {
-			for _, to := range data.tos {
-				p.taskPool.Submit(func() {
-					to.Write(data.msg.Bytes())
-				})
-			}
-		}
-		return
-	}
-
-	// 同步
 	for _, data := range dataMap {
+		data.initMsg()
 		for _, to := range data.tos {
-			to.Write(data.msg.Bytes())
+			if p.async2Tos { // 异步
+				p.taskPool.Submit(func() {
+					to.WriteTo(data)
+				})
+				continue
+			}
+			to.WriteTo(data)
 		}
 	}
 }

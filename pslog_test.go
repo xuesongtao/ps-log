@@ -3,7 +3,6 @@ package pslog
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -17,13 +16,30 @@ var (
 	tmpDir = "./tmp"
 )
 
+type StrBuf struct {
+	Buf strings.Builder
+}
+
+func (s *StrBuf) WriteTo(bus *LogHandlerBus) {
+	s.Buf.WriteString(bus.Msg)
+}
+
+type BytesBuf struct {
+	Buf bytes.Buffer
+}
+
+func (b *BytesBuf) WriteTo(bus *LogHandlerBus) {
+	b.Buf.WriteString(bus.Msg)
+}
+
 func TestTail(t *testing.T) {
 	ps, _ := NewPsLog(WithPreCleanOffset())
 	defer ps.Close()
 	ps.TailLogs()
 
-	strBuf := new(strings.Builder)
-	byteBuf := new(bytes.Buffer)
+	strBuf := new(StrBuf)
+	byteBuf := new(BytesBuf)
+	stdout := new(Stdout)
 	tmp := tmpDir + "/test2tail.log"
 	handler := &Handler{
 		Change:   -1,       // 每次都持久化 offset
@@ -33,7 +49,7 @@ func TestTail(t *testing.T) {
 			{
 				Content:  " ",
 				Excludes: []string{},
-				To:       []io.Writer{strBuf, byteBuf, os.Stdout},
+				To:       []PsLogWriter{strBuf, byteBuf, stdout},
 			},
 		},
 	}
@@ -72,10 +88,10 @@ func TestTail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if byteBuf.String() != strBuf.String() && byteBuf.String() != data {
+	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
 		t.Error("data:", data)
-		t.Error("byteBuf:", byteBuf.String())
-		t.Error("strBuf:", strBuf.String())
+		t.Error("byteBuf:", byteBuf.Buf.String())
+		t.Error("strBuf:", strBuf.Buf.String())
 	}
 }
 
@@ -83,8 +99,9 @@ func TestCron(t *testing.T) {
 	ps, _ := NewPsLog(WithPreCleanOffset())
 	defer ps.Close()
 
-	strBuf := new(strings.Builder)
-	byteBuf := new(bytes.Buffer)
+	strBuf := new(StrBuf)
+	byteBuf := new(BytesBuf)
+	stdout := new(Stdout)
 	tmp := tmpDir + "/test2cron.log"
 	handler := &Handler{
 		Change: -1, // 每次都持久化 offset
@@ -94,7 +111,7 @@ func TestCron(t *testing.T) {
 			{
 				Content:  " ",
 				Excludes: []string{},
-				To:       []io.Writer{strBuf, byteBuf, os.Stdout},
+				To:       []PsLogWriter{strBuf, byteBuf, stdout},
 			},
 		},
 	}
@@ -143,9 +160,9 @@ stopFor:
 		t.Fatal(err)
 	}
 
-	if byteBuf.String() != strBuf.String() && byteBuf.String() != data {
+	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
 		t.Error("data:", data)
-		t.Error("byteBuf:", byteBuf.String())
-		t.Error("strBuf:", strBuf.String())
+		t.Error("byteBuf:", byteBuf.Buf.String())
+		t.Error("strBuf:", strBuf.Buf.String())
 	}
 }
