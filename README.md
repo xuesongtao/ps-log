@@ -37,6 +37,7 @@ func main() {
   panic(err)
  }
 
+ tmp := "log/test.log"
  handler := &pslog.Handler{
   Change:   -1,
   Tail:     true,
@@ -45,40 +46,39 @@ func main() {
    {
     Content:  " ",
     Excludes: []string{},
-    To:       []io.Writer{os.Stdout},
+    To:       []pslog.PsLogWriter{&pslog.Stdout{}},
    },
   },
  }
-
  if err := ps.Register(handler); err != nil {
   panic(err)
  }
-
  closeCh := make(chan int)
  go func() {
-  fh := xfile.NewFileHandle("log/test.log")
-  if err := fh.Initf(os.O_RDWR | os.O_TRUNC); err != nil {
-   xlog.Error(err)
+  fh := xfile.NewFileHandle(tmp)
+  if err := fh.Initf(os.O_RDWR | os.O_APPEND | os.O_TRUNC); err != nil {
+   log.Println(err)
    return
   }
-  f := fh.GetFile()
+  defer fh.Close()
   for i := 0; i < 30; i++ {
    time.Sleep(time.Second)
-   _, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+   _, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+   // _, err := f.WriteString(fmt.Sprint(i) + "\n")
    if err != nil {
-    xlog.Error("write err:", err)
+    log.Println("write err:", err)
    }
   }
   close(closeCh)
  }()
 
- if err := ps.AddPaths("log/test.log"); err != nil {
+ if err := ps.AddPaths(tmp); err != nil {
   panic(err)
  }
-
  for range closeCh {}
 }
 ```
 
 #### 其他
+
 - 欢迎大佬们指正, 希望大佬给❤️，to [gitee](https://gitee.com/xuesongtao/ps-log.git), [github](https://github.com/xuesongtao/ps-log.git)

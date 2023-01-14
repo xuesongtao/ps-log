@@ -45,6 +45,7 @@ func main() {
 			log.Println(err)
 			return
 		}
+		defer fh.Close()
 		for i := 0; i < 30; i++ {
 			time.Sleep(time.Second)
 			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
