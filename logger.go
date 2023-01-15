@@ -20,7 +20,7 @@ type PsLogger interface {
 }
 
 var (
-	plg   PsLogger = newDefaultLogger()
+	plg  PsLogger = newDefaultLogger()
 	once sync.Once
 )
 
@@ -37,7 +37,7 @@ type defaultLogger struct {
 
 func newDefaultLogger() *defaultLogger {
 	return &defaultLogger{
-		log: log.New(os.Stderr, "", log.LstdFlags),
+		log: log.New(os.Stdout, "", log.LstdFlags),
 	}
 }
 
