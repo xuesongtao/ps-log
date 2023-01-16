@@ -357,7 +357,9 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 	// plg.Infof("dataMap: %+v", dataMap)
 	for _, data := range dataMap {
-		data.initMsg()
+		if data.skip() {
+			continue
+		}
 		for _, to := range data.tos {
 			if p.async2Tos { // 异步
 				p.taskPool.Submit(func() {

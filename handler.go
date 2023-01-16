@@ -118,9 +118,10 @@ type LogHandlerBus struct {
 	tos []PsLogWriter
 }
 
-func (l *LogHandlerBus) initMsg() {
+func (l *LogHandlerBus) skip() bool {
 	l.Msg = l.buf.String()
 	l.buf.Reset()
+	return l.Msg == ""
 }
 
 func (l *LogHandlerBus) Reset() {
