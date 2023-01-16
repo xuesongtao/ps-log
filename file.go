@@ -2,6 +2,7 @@ package pslog
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -145,19 +146,19 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 		return
 	}
 	// 移除当前目录下7天前的文件
-	offsetFiles, err := os.ReadDir(f.offsetDir())
+
+	offsetFiles, err := ioutil.ReadDir(f.offsetDir())
 	if err != nil {
-		plg.Errorf("os.ReadDir %q is failed, err: %v", f.offsetDir(), err)
+		plg.Errorf("ioutil.ReadDir %q is failed, err: %v", f.offsetDir(), err)
 		return
 	}
 	curTime := time.Now()
 	for _, offsetFile := range offsetFiles {
-		fileInfo, _ := offsetFile.Info()
-		if curTime.Sub(fileInfo.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
+		if curTime.Sub(offsetFile.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
 			continue
 		}
 
-		delFilename := filepath.Join(f.offsetDir(), fileInfo.Name())
+		delFilename := filepath.Join(f.offsetDir(), offsetFile.Name())
 		if err := os.Remove(delFilename); err != nil {
 			plg.Errorf("os.Remove %q is failed, err: %v", delFilename, err)
 		}
