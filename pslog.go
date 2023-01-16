@@ -325,7 +325,9 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 			handler.Write(data)
 		}
 	}
-	p.writer(dataMap)
+	if len(dataMap) > 0 {
+		p.writer(dataMap)
+	}
 
 	// 保存偏移量
 	fileInfo.offset = fileSize
@@ -357,11 +359,6 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
-	if len(dataMap) == 0 {
-		return
-	}
-
-	plg.Infof("dataMap: %+v", base.ToString(dataMap))
 	for _, data := range dataMap {
 		if data.skip() {
 			continue
