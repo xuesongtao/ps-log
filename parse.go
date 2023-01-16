@@ -1,6 +1,7 @@
 package pslog
 
 import (
+	"errors"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -13,15 +14,30 @@ const (
 )
 
 type LogDir struct {
+	Namespace   string   // log 的命名空间
 	Name        string   // 项目中 log 的目录名, 为空时, 默认 defaultLogDir
 	TargetNames []string // 目标文件名
-	Namespace   string   // log 的命名空间
 }
 
 func (l *LogDir) init() {
 	if l.Name == "" {
 		l.Name = defaultLogDir
 	}
+}
+
+func (l *LogDir) valid() error {
+	if l.Namespace == "" {
+		return errors.New("namespace is null")
+	}
+
+	if l.Name == "" {
+		return errors.New("name is null")
+	}
+
+	if len(l.TargetNames) == 0 {
+		return errors.New("targetNames is null")
+	}
+	return nil
 }
 
 // ProjectSrc 项目根目录
@@ -81,13 +97,13 @@ func (l *LogPath) ParseSrc(src *ProjectSrc) []*ProjectLog {
 		plg.Error("os.ReadDir is failed, err: ", err)
 		return nil
 	}
-	src.LogDir.init()
 
 	// 遍历项目
 	for _, projectDir := range projectDirs {
 		appName := projectDir.Name() // 项目名
 		logPaths := l.ParseLogPath(&Project{
 			LogDir: &LogDir{
+				Namespace:   src.LogDir.Namespace,
 				TargetNames: src.LogDir.TargetNames,
 			},
 			ProjectPath: filepath.Join(src.SrcPath, appName),
@@ -100,6 +116,15 @@ func (l *LogPath) ParseSrc(src *ProjectSrc) []*ProjectLog {
 // ParseLogPaths 解析项目 log path
 func (l *LogPath) ParseLogPath(project *Project) []*ProjectLog {
 	if l.excludePath(project.ProjectPath) {
+		return nil
+	}
+	if project.LogDir == nil {
+		plg.Error("logDir is nil")
+		return nil
+	}
+	project.LogDir.init()
+	if err := project.LogDir.valid(); err != nil {
+		plg.Error("project.LogDir.valid is failed, err:", err)
 		return nil
 	}
 
@@ -122,7 +147,7 @@ func (l *LogPath) ParseLogPath(project *Project) []*ProjectLog {
 // SetExcludeProjectDir 设置排除的项目目录
 func (l *LogPath) SetExcludeProjectDir(paths ...string) {
 	if l.excludeProjectDir == nil {
-		l.excludeProjectDir = make(map[string]bool, 5)
+		l.excludeProjectDir = make(map[string]bool, len(paths))
 	}
 	for _, path := range paths {
 		path = strings.TrimRight(path, "/")

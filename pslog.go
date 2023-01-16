@@ -124,37 +124,51 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 	return p.addLogPath(path2HandlerMap)
 }
 
-// addLogPath 添加 log path, 同时添加监听 log path
-func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
-	p.rwMu.Lock()
-	defer p.rwMu.Unlock()
-
+// validPath2Handler
+func (p *PsLog) validPath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
 		path = filepath.Clean(path)
-		if _, ok := p.logMap[path]; ok {
-			continue
-		}
 
 		// 处理 handler
 		if handler == nil {
 			if p.handler != nil {
 				handler = p.handler
 			} else {
-				return fmt.Errorf("%q no has handler", path)
+				return nil, fmt.Errorf("%q no has handler", path)
 			}
 		}
 		if err := handler.Valid(); err != nil {
-			return fmt.Errorf("%q handler is not ok, err: %v", path, err)
+			return nil, fmt.Errorf("%q handler is not ok, err: %v", path, err)
 		}
 		handler.init()
 
 		// 判断下是否为目录
 		st, err := os.Stat(path)
 		if err != nil {
-			return fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
+			return nil, fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
 		}
 		if st.IsDir() {
-			return fmt.Errorf("%q is dir, it should file", path)
+			return nil, fmt.Errorf("%q is dir, it should file", path)
+		}
+		new[path] = handler
+	}
+	return new, nil
+}
+
+// addLogPath 添加 log path, 同时添加监听 log path
+func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
+	new, err := p.validPath2Handler(path2HandlerMap)
+	if err != nil {
+		return err
+	}
+
+	// 加锁处理
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
+	for path, handler := range new {
+		if _, ok := p.logMap[path]; ok {
+			continue
 		}
 
 		// 保存 file
@@ -300,7 +314,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 			continue
 		}
 		if handler, ok := dataMap[targe.no]; !ok {
-			dataMap[targe.no] = &LogHandlerBus{LogPath: fileInfo.FileName(), buf: new(bytes.Buffer), tos: targe.To}
+			dataMap[targe.no] = &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: targe.To}
 		} else {
 			handler.buf.WriteString(string(data) + "\n")
 		}
@@ -325,14 +339,14 @@ func (p *PsLog) cleanOffset(fileInfo *FileInfo) {
 
 // parse 需要处理
 func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
-	if h.targets.null() {
+	if h.targets.Null() {
 		return nil, false
 	}
-	target, ok := h.targets.getTarget(row)
+	target, ok := h.targets.GetTarget(row)
 	if !ok {
 		return nil, false
 	}
-	return target, !target.excludes.search(row)
+	return target, !target.excludes.Search(row)
 }
 
 // writer 写入目标, 默认同步处理

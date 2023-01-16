@@ -23,7 +23,7 @@ type Target struct {
 	no       int           // 自增编号
 	Content  string        // 目标内容
 	Excludes []string      // 排除 msg
-	excludes *tire         // tire 树
+	excludes Matcher       // tire 树
 	To       []PsLogWriter // 处理
 }
 
@@ -33,8 +33,18 @@ type Handler struct {
 	Change    int32         // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
 	ExpireDur time.Duration // 文件句柄过期间隔, 常用于全局配置
 	ExpireAt  time.Time     // 文件句柄过期时间, 优先 ExpireDur 如: 2022-12-03 11:11:10
-	targets   *tire         // tire 树
-	Targets   []*Target     // 目标 msg
+	targets   Matcher
+	Targets   []*Target // 目标 msg
+	Ext       string    // 外部存入, 回调返回
+}
+
+// initMatcher 初始化匹配
+// arrLen 为匹配的数组长度
+func (h *Handler) initMatcher(arrLen int) Matcher {
+	if arrLen <= 1 {
+		return &Simple{}
+	}
+	return newTire()
 }
 
 func (h *Handler) Valid() error {
@@ -63,20 +73,20 @@ func (h *Handler) init() {
 	}
 
 	// 预处理 targets, exclude
-	h.targets = newTire()
+	h.targets = h.initMatcher(len(h.Targets))
 	no := 1
 	for _, target := range h.Targets {
 		if target.Content == "" {
 			continue
 		}
 		target.no = no
-		h.targets.insert([]byte(target.Content), target)
-		target.excludes = newTire()
+		h.targets.Insert([]byte(target.Content), target)
+		target.excludes = h.initMatcher(len(target.Excludes))
 		for _, exclude := range target.Excludes {
 			if exclude == "" {
 				continue
 			}
-			target.excludes.insert([]byte(exclude), nil)
+			target.excludes.Insert([]byte(exclude), nil)
 		}
 		no++
 	}
@@ -84,8 +94,9 @@ func (h *Handler) init() {
 
 // logHandler 解析到的内容
 type LogHandlerBus struct {
-	LogPath string
-	Msg     string
+	LogPath string // log 的路径
+	Msg     string // buf 中的 string
+	Ext     string // Handler 中的 Ext 值
 
 	buf *bytes.Buffer
 	tos []PsLogWriter

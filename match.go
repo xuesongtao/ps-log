@@ -1,8 +1,58 @@
 package pslog
 
 import (
+	"bytes"
+
 	"gitee.com/xuesongtao/gotool/base"
 )
+
+type Matcher interface {
+	Null() bool
+	Insert(bytes []byte, target ...*Target)
+	Search(target []byte) bool
+	GetTarget(target []byte) (*Target, bool)
+}
+
+// *******************************************************************************
+// *                             普通                                            *
+// *******************************************************************************
+
+// Simple 简单匹配
+type Simple struct {
+	Target *Target
+	match  []byte // 待匹配的内容
+}
+
+func (s *Simple) Null() bool {
+	return len(s.match) == 0
+}
+
+func (s *Simple) Insert(bytes []byte, target ...*Target) {
+	s.match = bytes
+	if len(target) > 0 {
+		s.Target = target[0]
+	}
+}
+
+func (s *Simple) GetTarget(target []byte) (*Target, bool) {
+	if bytes.Contains(target, s.match) {
+		return s.Target, true
+	}
+	return nil, false
+}
+
+func (s *Simple) Search(target []byte) bool {
+	return bytes.Contains(target, s.match)
+}
+
+// *******************************************************************************
+// *                             字典树                                           *
+// *******************************************************************************
+
+// 字典树
+type Tire struct {
+	root *node
+}
 
 type node struct {
 	isNull   bool // 用于标记 tire 除根以外是否为空, 只在 root node 记录有效
@@ -10,7 +60,7 @@ type node struct {
 	IsEnd    bool
 	Data     byte
 	Children [255]*node // TODO 待优化
-	Target   *Target
+	target   *Target
 }
 
 func newNode(b byte, root ...bool) *node {
@@ -33,19 +83,19 @@ func (n *node) String() string {
 	return base.ToString(n)
 }
 
-// 字典树
-type tire struct {
-	root *node
-}
-
-func newTire() *tire {
+func newTire() *Tire {
 	// 根节点设置为 '/'
-	return &tire{root: newNode('/', true)}
+	return &Tire{root: newNode('/', true)}
 }
 
-// insert 新增模式串
-func (t *tire) insert(bytes []byte, target ...*Target) {
-	if t.null() { // 如果为空的话, 修改下标记
+// null 是否为空
+func (t *Tire) Null() bool {
+	return t.root.isNull
+}
+
+// Insert 新增模式串
+func (t *Tire) Insert(bytes []byte, target ...*Target) {
+	if t.Null() { // 如果为空的话, 修改下标记
 		t.root.isNull = false
 	}
 	dataLen := len(bytes)
@@ -60,23 +110,23 @@ func (t *tire) insert(bytes []byte, target ...*Target) {
 	}
 	curNode.IsEnd = true
 	if len(target) > 0 {
-		curNode.Target = target[0]
+		curNode.target = target[0]
 	}
 }
 
-// search 查询主串
-func (t *tire) search(target []byte) bool {
+// Search 查询主串
+func (t *Tire) Search(target []byte) bool {
 	node := t.searchNode(target)
 	return node.IsEnd
 }
 
-// getTarget 获取 target
-func (t *tire) getTarget(target []byte) (*Target, bool) {
+// GetTarget 获取 target
+func (t *Tire) GetTarget(target []byte) (*Target, bool) {
 	node := t.searchNode(target)
-	return node.Target, node.IsEnd && node.Target != nil
+	return node.target, node.IsEnd && node.target != nil
 }
 
-func (t *tire) searchNode(target []byte) *node {
+func (t *Tire) searchNode(target []byte) *node {
 	dataLen := len(target)
 	curNode := t.root
 	var b byte
@@ -96,9 +146,4 @@ func (t *tire) searchNode(target []byte) *node {
 	}
 	// plg.Info(curNode)
 	return curNode
-}
-
-// null 是否为空
-func (t *tire) null() bool {
-	return t.root.isNull
 }

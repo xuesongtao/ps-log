@@ -37,7 +37,7 @@ func TestTireMem(t *testing.T) {
 	tree := newTire()
 	for i, tt := range tts {
 		printMemStats(fmt.Sprintf("第%d次分配", i))
-		tree.insert(tt)
+		tree.Insert(tt)
 	}
 	// var arr [255]*node
 	// for _, v := range arr {
@@ -51,19 +51,19 @@ func TestTrie(t *testing.T) {
 	row := `[2023-01-04T21:21:56+08:00] 测试 [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
 	// row := `[ERRO] 110.184`
 	tree := newTire()
-	if !tree.null() {
+	if !tree.Null() {
 		t.Error("null is no ok")
 	}
 	for _, tt := range tts {
-		tree.insert(tt)
+		tree.Insert(tt)
 	}
-	if tree.null() {
+	if tree.Null() {
 		t.Error("null is no ok")
 	}
 
 	bb := []byte(row)
 	ok := contains(bb)
-	if tree.search(bb) != ok {
+	if tree.Search(bb) != ok {
 		t.Errorf("handle is failed, it should is [%v]", ok)
 	}
 }
@@ -78,12 +78,12 @@ func BenchmarkMatchForTire(b *testing.B) {
 	row := `[2023-01-04T21:21:56+08:00] [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
 	tree := newTire()
 	for _, tt := range tts {
-		tree.insert(tt)
+		tree.Insert(tt)
 	}
 	by := []byte(row)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.search(by)
+		tree.Search(by)
 	}
 	// b.ResetTimer()
 	printMemStats("test")
