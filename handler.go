@@ -20,7 +20,7 @@ func (p *Stdout) WriteTo(bus *LogHandlerBus) {
 
 // Target 目标内容
 type Target struct {
-	no       int           // 自增编号
+	No       int           // 自增编号
 	Content  string        // 目标内容
 	Excludes []string      // 排除 msg
 	excludes Matcher       // tire 树
@@ -83,7 +83,7 @@ func (h *Handler) init() {
 		if target.Content == "" {
 			continue
 		}
-		target.no = no
+		target.No = no
 		h.targets.Insert([]byte(target.Content), target)
 		target.excludes = h.initMatcher(len(target.Excludes))
 		for _, exclude := range target.Excludes {
