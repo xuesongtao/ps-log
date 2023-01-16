@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	ps, err := pslog.NewPsLog(pslog.WithAsync2Tos(), pslog.WithPreCleanOffset())
+	ps, err := pslog.NewPsLog(pslog.WithAsync2Tos())
 	if err != nil {
 		panic(err)
 	}
@@ -24,6 +24,7 @@ func main() {
 
 	tmp := "log/test.log"
 	handler := &pslog.Handler{
+		CleanOffset: true,
 		Change:   -1,
 		Tail:     true,
 		ExpireAt: pslog.NoExpire,

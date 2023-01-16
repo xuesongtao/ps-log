@@ -79,6 +79,10 @@ func (f *FileInfo) initOffset() {
 		return
 	}
 
+	// 初次使用需要判断下是否需要清除偏移量
+	if f.cleanOffset() {
+		return
+	}
 	filename := f.offsetFilename()
 	offset, err := f.getContent(filename)
 	if err != nil {
@@ -87,6 +91,17 @@ func (f *FileInfo) initOffset() {
 	}
 	offsetInt, _ := strconv.Atoi(offset)
 	f.offset = int64(offsetInt)
+}
+
+func (f *FileInfo) cleanOffset() (skip bool) {
+	if !f.Handler.CleanOffset {
+		return
+	}
+	f.offset = 0
+	f.putContent(f.offsetFilename(), "0")
+	f.Handler.CleanOffset = false
+	skip = true
+	return
 }
 
 // saveOffset 保存偏移量

@@ -34,13 +34,6 @@ func WithTaskPoolSize(size int) Opt {
 	}
 }
 
-// WithPreCleanOffset 是否预先清理文件偏移量
-func WithPreCleanOffset() Opt {
-	return func(pl *PsLog) {
-		pl.preCleanOffset = true
-	}
-}
-
 // WithCleanUpTime 设置清理 logMap 的周期
 func WithCleanUpTime(dur time.Duration) Opt {
 	return func(pl *PsLog) {
@@ -50,18 +43,17 @@ func WithCleanUpTime(dur time.Duration) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail           bool // 是否需要实时分析
-	async2Tos      bool // 是否异步处理 tos
-	closed         bool
-	preCleanOffset bool          // 是否需要先清理已经保存的 offset
-	cleanUpTime    time.Duration // 清理 logMap 的周期
-	rwMu           sync.RWMutex
-	taskPool       *tl.TaskPool        // 任务池
-	handler        *Handler            // 处理部分
-	watch          *Watch              // 文件监听
-	watchCh        chan *WatchFileInfo // 文件监听文件内容
-	closeCh        chan struct{}
-	logMap         map[string]*FileInfo // key: 文件路径
+	tail        bool // 是否需要实时分析
+	async2Tos   bool // 是否异步处理 tos
+	closed      bool
+	cleanUpTime time.Duration // 清理 logMap 的周期
+	rwMu        sync.RWMutex
+	taskPool    *tl.TaskPool        // 任务池
+	handler     *Handler            // 处理部分
+	watch       *Watch              // 文件监听
+	watchCh     chan *WatchFileInfo // 文件监听文件内容
+	closeCh     chan struct{}
+	logMap      map[string]*FileInfo // key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -120,11 +112,16 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 
 // prePath2Handler 预处理
 func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+	tmp := p.cloneLogMap()
+
 	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
-		path = filepath.Clean(path)
+		if _, ok := tmp[path]; ok {
+			continue
+		}
 
+		path = filepath.Clean(path)
 		// 处理 handler
 		if handler == nil {
 			if p.handler != nil {
@@ -162,6 +159,10 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 	for path, handler := range new {
+		if _, ok := p.logMap[path]; ok {
+			continue
+		}
+
 		// 保存 file
 		fileInfo := &FileInfo{Handler: handler}
 		fileInfo.Parse(path)
@@ -261,8 +262,6 @@ func (p *PsLog) CronLogs() {
 
 // parseLog 解析文件
 func (p *PsLog) parseLog(fileInfo *FileInfo) {
-	// 先处理下是否需要清理 offset
-	p.cleanOffset(fileInfo)
 	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
 	if err != nil {
 		plg.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
@@ -323,15 +322,6 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	p.taskPool.Submit(func() {
 		fileInfo.saveOffset(fileSize)
 	})
-}
-
-// cleanOffset 清理已保存的 offset
-func (p *PsLog) cleanOffset(fileInfo *FileInfo) {
-	if p.preCleanOffset {
-		fileInfo.offset = 0
-		fileInfo.putContent(fileInfo.offsetFilename(), "0")
-		p.preCleanOffset = false
-	}
 }
 
 // parse 需要处理

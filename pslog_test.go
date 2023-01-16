@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"text/tabwriter"
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
@@ -86,23 +85,15 @@ string with some lines being really long.`
 	}
 }
 
-func TestTableDemo(t *testing.T) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "a\tb\tc")
-	fmt.Fprintln(w, "aa\tbb\tcc")
-	fmt.Fprintln(w, "aaa\t") // trailing tab
-	fmt.Fprintln(w, "aaaa\tdddd\teeee")
-	w.Flush()
-}
-
 func TestList(t *testing.T) {
-	ps, _ := NewPsLog(WithPreCleanOffset())
+	ps, _ := NewPsLog()
 	defer ps.Close()
 
 	handler := &Handler{
-		Change:   -1,       // 每次都持久化 offset
-		Tail:     true,     // 实时监听
-		ExpireAt: NoExpire, // 文件句柄不过期
+		CleanOffset: true,
+		Change:      -1,       // 每次都持久化 offset
+		Tail:        true,     // 实时监听
+		ExpireAt:    NoExpire, // 文件句柄不过期
 		Targets: []*Target{
 			{
 				Content:  "[ERRO]",
@@ -110,12 +101,12 @@ func TestList(t *testing.T) {
 				To:       []PsLogWriter{&Stdout{}},
 			},
 			{
-				Content:  "1",
+				Content:  "1 ",
 				Excludes: []string{},
 				To:       []PsLogWriter{&Stdout{}},
 			},
 			{
-				Content:  "2",
+				Content:  "2 ",
 				Excludes: []string{},
 				To:       []PsLogWriter{&Stdout{}},
 			},
@@ -134,7 +125,7 @@ func TestList(t *testing.T) {
 }
 
 func TestTail(t *testing.T) {
-	ps, _ := NewPsLog(WithPreCleanOffset())
+	ps, _ := NewPsLog()
 	defer ps.Close()
 	ps.TailLogs()
 
@@ -143,9 +134,10 @@ func TestTail(t *testing.T) {
 	stdout := new(Stdout)
 	tmp := tmpDir + "/test2tail.log"
 	handler := &Handler{
-		Change:   -1,       // 每次都持久化 offset
-		Tail:     true,     // 实时监听
-		ExpireAt: NoExpire, // 文件句柄不过期
+		CleanOffset: true,
+		Change:      -1,       // 每次都持久化 offset
+		Tail:        true,     // 实时监听
+		ExpireAt:    NoExpire, // 文件句柄不过期
 		Targets: []*Target{
 			{
 				Content:  " ",
@@ -197,7 +189,7 @@ func TestTail(t *testing.T) {
 }
 
 func TestCron(t *testing.T) {
-	ps, _ := NewPsLog(WithPreCleanOffset())
+	ps, _ := NewPsLog()
 	defer ps.Close()
 
 	strBuf := new(StrBuf)
@@ -205,7 +197,8 @@ func TestCron(t *testing.T) {
 	stdout := new(Stdout)
 	tmp := tmpDir + "/test2cron.log"
 	handler := &Handler{
-		Change: -1, // 每次都持久化 offset
+		CleanOffset: true,
+		Change:      -1, // 每次都持久化 offset
 		// Tail:     true,     // 实时监听
 		ExpireAt: NoExpire, // 文件句柄不过期
 		Targets: []*Target{

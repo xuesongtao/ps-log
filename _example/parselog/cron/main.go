@@ -12,12 +12,13 @@ import (
 )
 
 func main() {
-	ps, _ := pslog.NewPsLog(pslog.WithPreCleanOffset())
+	ps, _ := pslog.NewPsLog()
 	defer ps.Close()
 
 	tmp := "log/test.log"
 	handler := &pslog.Handler{
-		Change: -1, // 每次都持久化 offset
+		CleanOffset: true,
+		Change:      -1, // 每次都持久化 offset
 		// Tail:     true,     // 实时监听
 		ExpireAt: pslog.NoExpire, // 文件句柄不过期
 		Targets: []*pslog.Target{
