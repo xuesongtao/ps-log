@@ -80,5 +80,6 @@ func main() {
 ```
 
 #### 其他
+- 采集服务示例: [gitee](https://gitee.com/xuesongtao/collect-log.git)
 
 - 欢迎大佬们指正, 希望大佬给❤️，to [gitee](https://gitee.com/xuesongtao/ps-log.git), [github](https://github.com/xuesongtao/ps-log.git)
