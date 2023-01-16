@@ -358,8 +358,8 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 	if len(dataMap) == 0 {
 		return
 	}
-	
-	plg.Infof("dataMap: %+v", dataMap)
+
+	plg.Infof("dataMap: %+v", base.ToString(dataMap))
 	for _, data := range dataMap {
 		if data.skip() {
 			continue
