@@ -48,8 +48,8 @@ func (h *Handler) initMatcher(arrLen int) Matcher {
 }
 
 func (h *Handler) Valid() error {
-	if h.ExpireAt.IsZero() {
-		return errors.New("ExpireAt is required")
+	if h.ExpireAt.IsZero() && h.ExpireDur == 0 {
+		return errors.New("ExpireAt, ExpireDur can not both null")
 	}
 
 	for i, target := range h.Targets {
@@ -63,10 +63,6 @@ func (h *Handler) Valid() error {
 
 	if len(h.Targets) == 0 {
 		return errors.New("Targets is required")
-	}
-
-	if h.ExpireAt.IsZero() && h.ExpireDur == 0 {
-		return errors.New("ExpireAt, ExpireDur can not both null")
 	}
 	return nil
 }
