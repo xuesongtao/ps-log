@@ -3,7 +3,6 @@ package pslog
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +15,6 @@ import (
 	"gitee.com/xuesongtao/gotool/base"
 	tl "gitee.com/xuesongtao/taskpool"
 	tw "github.com/olekukonko/tablewriter"
-)
-
-var (
-	noHandlerErr = errors.New("handler is null, you can call Register first")
 )
 
 // Opt
