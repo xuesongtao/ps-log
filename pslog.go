@@ -355,7 +355,7 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
-	// plg.Infof("dataMap: %+v", dataMap)
+	plg.Infof("dataMap: %+v", dataMap)
 	for _, data := range dataMap {
 		if data.skip() {
 			continue
