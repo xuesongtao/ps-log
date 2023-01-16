@@ -124,6 +124,10 @@ func (l *LogHandlerBus) skip() bool {
 	return l.Msg == ""
 }
 
+func (l *LogHandlerBus) Write(b []byte) {
+	l.buf.WriteString(string(b) + "\n")
+}
+
 func (l *LogHandlerBus) Reset() {
 	l.LogPath = ""
 	l.Msg = ""
