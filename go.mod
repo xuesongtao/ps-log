@@ -10,5 +10,4 @@ require (
 require (
 	gitee.com/xuesongtao/taskpool v1.2.3
 	github.com/fsnotify/fsnotify v1.6.0
-	golang.org/x/sys v0.4.0 // indirect
 )
