@@ -317,10 +317,10 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		if !ok {
 			continue
 		}
-		plg.Info("target:", base.ToString(targe))
 		if handler, ok := dataMap[targe.No]; !ok {
 			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: targe.To}
 			bus.Write(data)
+			dataMap[targe.No] = bus
 		} else {
 			handler.Write(data)
 		}
