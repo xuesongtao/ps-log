@@ -64,12 +64,20 @@ func (h *Handler) Valid() error {
 	if len(h.Targets) == 0 {
 		return errors.New("Targets is required")
 	}
+
+	if h.ExpireAt.IsZero() && h.ExpireDur == 0 {
+		return errors.New("ExpireAt, ExpireDur can not both null")
+	}
 	return nil
 }
 
 func (h *Handler) init() {
 	if h.Change == 0 {
 		h.Change = defaultHandleChange
+	}
+
+	if h.ExpireAt.IsZero() {
+		h.ExpireAt = time.Now().Add(h.ExpireDur)
 	}
 
 	// 预处理 targets, exclude
