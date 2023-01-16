@@ -20,10 +20,10 @@ func (p *Stdout) WriteTo(bus *LogHandlerBus) {
 
 // Target 目标内容
 type Target struct {
-	No       int           // 自增编号
-	Content  string        // 目标内容
+	No       int    // 自增编号
+	Content  string // 目标内容
+	excludes Matcher
 	Excludes []string      // 排除 msg
-	excludes Matcher       // tire 树
 	To       []PsLogWriter // 处理
 }
 

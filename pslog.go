@@ -104,12 +104,9 @@ func (p *PsLog) Register(handler *Handler) error {
 // AddPaths 添加 path, path 必须为文件全路径
 // 根据 p.handler 进行处理
 func (p *PsLog) AddPaths(paths ...string) error {
-	if p.handler == nil {
-		return noHandlerErr
-	}
 	path2HandlerMap := make(map[string]*Handler, len(paths))
 	for _, path := range paths {
-		path2HandlerMap[path] = p.handler
+		path2HandlerMap[path] = nil
 	}
 	return p.addLogPath(path2HandlerMap)
 }
@@ -128,15 +125,10 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 
 // prePath2Handler 预处理
 func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
-	tmp := p.cloneLogMap()
-
 	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
 		path = filepath.Clean(path)
-		if _, ok := tmp[path]; ok {
-			continue
-		}
 
 		// 处理 handler
 		if handler == nil {
@@ -317,6 +309,8 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		if !ok {
 			continue
 		}
+
+		// 按不同内容进行处理
 		if handler, ok := dataMap[targe.No]; !ok {
 			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: targe.To}
 			bus.Write(data)
