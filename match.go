@@ -19,7 +19,7 @@ type Matcher interface {
 
 // Simple 简单匹配
 type Simple struct {
-	Target *Target
+	target *Target
 	match  []byte // 待匹配的内容
 }
 
@@ -30,13 +30,13 @@ func (s *Simple) Null() bool {
 func (s *Simple) Insert(bytes []byte, target ...*Target) {
 	s.match = bytes
 	if len(target) > 0 {
-		s.Target = target[0]
+		s.target = target[0]
 	}
 }
 
 func (s *Simple) GetTarget(target []byte) (*Target, bool) {
 	if bytes.Contains(target, s.match) {
-		return s.Target, true
+		return s.target, true
 	}
 	return nil, false
 }

@@ -92,6 +92,18 @@ func (h *Handler) init() {
 	}
 }
 
+func (h *Handler) getTargetDump() string {
+	data := ""
+	for _, v := range h.Targets {
+		if data == "" {
+			data += v.Content
+		} else {
+			data += ";" + v.Content
+		}
+	}
+	return data
+}
+
 // logHandler 解析到的内容
 type LogHandlerBus struct {
 	LogPath string // log 的路径

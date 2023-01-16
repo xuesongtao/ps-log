@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"gitee.com/xuesongtao/gotool/base"
 	tl "gitee.com/xuesongtao/taskpool"
+	tw "github.com/olekukonko/tablewriter"
 )
 
 var (
@@ -124,11 +126,17 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 	return p.addLogPath(path2HandlerMap)
 }
 
-// validPath2Handler
-func (p *PsLog) validPath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+// prePath2Handler 预处理
+func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+	tmp := p.cloneLogMap()
+
+	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
 		path = filepath.Clean(path)
+		if _, ok := tmp[path]; ok {
+			continue
+		}
 
 		// 处理 handler
 		if handler == nil {
@@ -158,7 +166,7 @@ func (p *PsLog) validPath2Handler(path2HandlerMap map[string]*Handler) (map[stri
 
 // addLogPath 添加 log path, 同时添加监听 log path
 func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
-	new, err := p.validPath2Handler(path2HandlerMap)
+	new, err := p.prePath2Handler(path2HandlerMap)
 	if err != nil {
 		return err
 	}
@@ -167,10 +175,6 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 	for path, handler := range new {
-		if _, ok := p.logMap[path]; ok {
-			continue
-		}
-
 		// 保存 file
 		fileInfo := &FileInfo{Handler: handler}
 		fileInfo.Parse(path)
@@ -395,7 +399,7 @@ func (p *PsLog) sentry() {
 }
 
 func (p *PsLog) cleanUp(t time.Time) {
-	tmpLogMap := p.cloneLogMap()
+	tmpLogMap := p.cloneLogMap(true)
 	deleteKeys := make([]string, 0, len(tmpLogMap))
 	for path, fileInfo := range tmpLogMap {
 		if fileInfo.IsExpire(t) {
@@ -411,12 +415,49 @@ func (p *PsLog) cleanUp(t time.Time) {
 	p.rwMu.Unlock()
 }
 
-func (p *PsLog) cloneLogMap() map[string]*FileInfo {
-	p.rwMu.RLock()
-	tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
-	for k, v := range p.logMap {
-		tmpLogMap[k] = v
+func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
+	defaultDepth := false
+	if len(depth) > 0 {
+		defaultDepth = depth[0]
 	}
-	p.rwMu.RUnlock()
-	return tmpLogMap
+	p.rwMu.RLock()
+	defer p.rwMu.RUnlock()
+	if defaultDepth {
+		tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
+		for k, v := range p.logMap {
+			tmpLogMap[k] = v
+		}
+		return tmpLogMap
+	}
+	tmp := p.logMap
+	return tmp
+}
+
+// List 返回待处理的内容
+// 格式:
+// ---------------------------
+// |  PATH |  TAIL | OFFSET  |
+// ---------------------------
+// |  xxxx |  true | 100     |
+// ---------------------------
+func (p *PsLog) List() string {
+	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS"}
+	buffer := new(bytes.Buffer)
+	buffer.WriteByte('\n')
+
+	table := tw.NewWriter(buffer)
+	table.SetHeader(header)
+	table.SetRowLine(true)
+	table.SetCenterSeparator("|")
+	for k, v := range p.cloneLogMap() {
+		data := []string{
+			k,
+			base.ToString(v.Handler.Tail),
+			base.ToString(v.offset),
+			v.Handler.getTargetDump(),
+		}
+		table.Append(data)
+	}
+	table.Render()
+	return buffer.String()
 }
