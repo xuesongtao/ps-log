@@ -28,9 +28,11 @@ func WithAsync2Tos() Opt {
 }
 
 // WithTaskPoolSize 设置协程池大小
-func WithTaskPoolSize(size int) Opt {
+func WithTaskPoolSize(size int, taskPoolOpts ...tl.TaskPoolOption) Opt {
 	return func(pl *PsLog) {
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg))
+		// 默认把 logger 设置为 plg
+		opts := append([]tl.TaskPoolOption{tl.WithPoolLogger(plg)}, taskPoolOpts...)
+		pl.taskPool = tl.NewTaskPool("parse log", size, opts...)
 	}
 }
 
