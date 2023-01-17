@@ -309,7 +309,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 			continue
 		}
 
-		plg.Info("target:", base.ToString(target))
+		// plg.Info("target:", base.ToString(target))
 		// 按不同内容进行处理
 		if handler, ok := dataMap[target.No]; !ok {
 			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
@@ -320,7 +320,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		}
 	}
 
-	plg.Info("dataMap:", base.ToString(dataMap))
+	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
 	}
