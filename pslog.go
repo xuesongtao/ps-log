@@ -305,12 +305,11 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		data := rows.Bytes()
 		readSize += int64(len(data))
 		target, ok := p.parse(fileInfo.Handler, data)
-		plg.Info(target, ok)
 		if !ok {
 			continue
 		}
 
-		// plg.Info("target:", base.ToString(target))
+		plg.Info("target:", base.ToString(target))
 		// 按不同内容进行处理
 		if handler, ok := dataMap[target.No]; !ok {
 			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
