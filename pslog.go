@@ -447,8 +447,9 @@ func (p *PsLog) List() string {
 	table := tw.NewWriter(buffer)
 	table.SetHeader(header)
 	table.SetRowLine(true)
+	// table.SetBorder(false)
 	table.SetCenterSeparator("|")
-	table.SetAutoMergeCells(true)
+	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
 		data := []string{
 			k,

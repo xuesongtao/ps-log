@@ -97,7 +97,7 @@ func TestList(t *testing.T) {
 		Targets: []*Target{
 			{
 				Content:  "[ERRO]",
-				Excludes: []string{},
+				Excludes: []string{"1"},
 				To:       []PsLogWriter{&Stdout{}},
 			},
 			{

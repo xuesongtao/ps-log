@@ -120,7 +120,10 @@ func (h *Handler) getExcludesDump() string {
 				es += ";" + e
 			}
 		}
-		tmp := "【" + t.Content + " 排出 " + es + "】"
+		if es == "" {
+			continue
+		}
+		tmp := "【" + t.Content + "排除" + es + "】"
 		if data == "" {
 			data += tmp
 		} else {
