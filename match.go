@@ -120,7 +120,7 @@ func (t *Tire) Insert(bytes []byte, target ...*Target) {
 // Search 查询主串
 func (t *Tire) Search(target []byte) bool {
 	node := t.searchNode(target)
-	return node.IsEnd
+	return node.IsEnd && node.target != nil
 }
 
 // GetTarget 获取 target
