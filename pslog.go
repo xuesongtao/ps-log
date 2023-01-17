@@ -305,6 +305,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		data := rows.Bytes()
 		readSize += int64(len(data))
 		target, ok := p.parse(fileInfo.Handler, data)
+		plg.Info(target, ok)
 		if !ok {
 			continue
 		}
