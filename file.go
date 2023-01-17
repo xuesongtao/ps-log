@@ -79,7 +79,7 @@ func (f *FileInfo) offsetFilename() string {
 }
 
 func (f *FileInfo) storeOffset(o int64) {
-	atomic.AddInt64(&f.offset, o)
+	atomic.StoreInt64(&f.offset, o)
 }
 
 func (f *FileInfo) loadOffset() int64 {
