@@ -47,8 +47,8 @@ func main() {
 			return
 		}
 		defer fh.Close()
-		for i := 0; i < 30; i++ {
-			time.Sleep(time.Second)
+		for i := 0; i < 10; i++ {
+			// time.Sleep(time.Second)
 			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			// _, err := f.WriteString(fmt.Sprint(i) + "\n")
 			if err != nil {
@@ -61,7 +61,7 @@ func main() {
 	if err := ps.AddPaths(tmp); err != nil {
 		panic(err)
 	}
-
-	for range closeCh {
-	}
+	
+	log.Println(ps.List())
+	for range closeCh {}
 }

@@ -85,7 +85,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 // Register 注册处理器
 func (p *PsLog) Register(handler *Handler) error {
 	p.handler = handler
-	return nil
+	return p.handler.Valid()
 }
 
 // AddPaths 添加 path, path 必须为文件全路径
@@ -154,7 +154,7 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 	if err != nil {
 		return err
 	}
-
+	// plg.Info("new:", base.ToString(new))
 	// 加锁处理
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
@@ -174,31 +174,31 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
 			}
 		}
 	}
+	// plg.Info("logMap:", base.ToString(p.logMap))
 	return nil
 }
 
 // Close 释放资源
 func (p *PsLog) Close() {
 	p.rwMu.Lock()
-	defer p.rwMu.Unlock()
-
-	if p.closed { // 已经关了的就退出, 防止重复关闭 chan panic
+	if !p.closed {
+		p.closed = true
+		p.rwMu.Unlock()
+	} else { // 已经关了的就退出, 防止重复关闭 chan panic
+		p.rwMu.Unlock()
 		return
 	}
 
 	if p.watch != nil {
 		p.watch.Close()
 	}
-
-	filePool.Close()
-
 	if p.taskPool != nil {
 		p.taskPool.SafeClose()
 	}
+	filePool.Close()
 
 	// close(p.watchCh) // p.watch.Close() 执行后, p.watchCh 会被关闭
 	close(p.closeCh)
-	p.closed = true
 }
 
 // TailLogs 实时解析 log
@@ -262,6 +262,11 @@ func (p *PsLog) CronLogs() {
 
 // parseLog 解析文件
 func (p *PsLog) parseLog(fileInfo *FileInfo) {
+	if p.HasClose() {
+		plg.Warning("ps-log is closed")
+		return
+	}
+
 	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
 	if err != nil {
 		plg.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
@@ -299,29 +304,39 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		}
 		data := rows.Bytes()
 		readSize += int64(len(data))
-		targe, ok := p.parse(fileInfo.Handler, data)
+		target, ok := p.parse(fileInfo.Handler, data)
 		if !ok {
 			continue
 		}
 
+		// plg.Info("target:", base.ToString(target))
 		// 按不同内容进行处理
-		if handler, ok := dataMap[targe.No]; !ok {
-			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: targe.To}
+		if handler, ok := dataMap[target.No]; !ok {
+			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
 			bus.Write(data)
-			dataMap[targe.No] = bus
+			dataMap[target.No] = bus
 		} else {
 			handler.Write(data)
 		}
 	}
+
+	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
 	}
 
 	// 保存偏移量
-	fileInfo.offset = fileSize
+	fileInfo.storeOffset(fileSize)
 	p.taskPool.Submit(func() {
 		fileInfo.saveOffset(fileSize)
 	})
+}
+
+// HasClose 是否已经关闭
+func (p *PsLog) HasClose() bool {
+	p.rwMu.RLock()
+	defer p.rwMu.RUnlock()
+	return p.closed
 }
 
 // parse 需要处理
@@ -437,7 +452,7 @@ func (p *PsLog) List() string {
 		data := []string{
 			k,
 			base.ToString(v.Handler.Tail),
-			base.ToString(v.offset),
+			base.ToString(v.loadOffset()),
 			v.Handler.getTargetDump(),
 		}
 		table.Append(data)

@@ -80,7 +80,7 @@ func (w *Watch) Remove(paths ...string) error {
 
 // Close
 func (w *Watch) Close() {
-	w.fileMap = nil
+	// w.fileMap = nil
 	w.watcher.Close()
 }
 
@@ -90,6 +90,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 		defer func() {
 			w.watcher.Close()
 			close(busCh)
+			w.fileMap = nil
 			if err := recover(); err != nil {
 				plg.Error("recover err:", debug.Stack())
 			}

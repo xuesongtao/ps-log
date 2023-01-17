@@ -36,12 +36,15 @@ func (s *Simple) Insert(bytes []byte, target ...*Target) {
 
 func (s *Simple) GetTarget(target []byte) (*Target, bool) {
 	if bytes.Contains(target, s.match) {
-		return s.target, true
+		return s.target, true && s.target != nil
 	}
 	return nil, false
 }
 
 func (s *Simple) Search(target []byte) bool {
+	if len(s.match) == 0 {
+		return false
+	}
 	return bytes.Contains(target, s.match)
 }
 

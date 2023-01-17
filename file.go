@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
@@ -14,7 +15,7 @@ import (
 
 const (
 	saveOffsetDir         = ".pslog" // 保存偏移量的文件目录
-	cleanOffsetFileDayDur = 1        // 清理偏移量文件变动多少天之前的文件
+	cleanOffsetFileDayDur = 3        // 清理偏移量文件变动多少天之前的文件
 )
 
 type FileInfo struct {
@@ -61,15 +62,28 @@ func (f *FileInfo) CleanNameFmt() string {
 	return f.Name[:tmpIndex]
 }
 
+// PsLogDir 目录
+func (f *FileInfo) PsLogDir() string {
+	return filepath.Join(f.Dir, saveOffsetDir)
+}
+
 // offsetDir 保存偏移量文件的目录
 func (f *FileInfo) offsetDir() string {
-	return filepath.Join(f.Dir, saveOffsetDir)
+	return filepath.Join(f.PsLogDir(), "offset")
 }
 
 // offsetFilename 获取保存文件偏移量的名称
 func (f *FileInfo) offsetFilename() string {
 	// 处理为 xxx/.pslog/offset/_xxx.log.txt
-	return filepath.Join(f.offsetDir(), "offset", "_"+f.Name+".txt")
+	return filepath.Join(f.offsetDir(), "_"+f.Name+".txt")
+}
+
+func (f *FileInfo) storeOffset(o int64) {
+	atomic.AddInt64(&f.offset, o)
+}
+
+func (f *FileInfo) loadOffset() int64 {
+	return atomic.LoadInt64(&f.offset)
 }
 
 // initOffset 初始化文件 offset
@@ -160,8 +174,8 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 		}
 		return
 	}
-	// 移除当前目录下7天前的文件
 
+	// 移除当前目录下cleanOffsetFileDayDur天前的文件
 	offsetFiles, err := ioutil.ReadDir(f.offsetDir())
 	if err != nil {
 		plg.Errorf("ioutil.ReadDir %q is failed, err: %v", f.offsetDir(), err)
