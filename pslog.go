@@ -320,7 +320,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 		}
 	}
 
-	// plg.Info("dataMap:", base.ToString(dataMap))
+	plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
 	}
