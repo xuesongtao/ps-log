@@ -109,6 +109,27 @@ func (h *Handler) getTargetDump() string {
 	return data
 }
 
+func (h *Handler) getExcludesDump() string {
+	data := ""
+	for _, t := range h.Targets {
+		es := ""
+		for _, e := range t.Excludes {
+			if es == "" {
+				es += e
+			} else {
+				es += ";" + e
+			}
+		}
+		tmp := "【" + t.Content + " 排出 " + es + "】"
+		if data == "" {
+			data += tmp
+		} else {
+			data += ";" + tmp
+		}
+	}
+	return data
+}
+
 // logHandler 解析到的内容
 type LogHandlerBus struct {
 	LogPath string // log 的路径

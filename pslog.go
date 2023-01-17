@@ -434,13 +434,13 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 
 // List 返回待处理的内容
 // 格式:
-// ---------------------------
-// |  PATH |  TAIL | OFFSET  |
-// ---------------------------
-// |  xxxx |  true | 100     |
-// ---------------------------
+// ------------------------------------------------
+// |  PATH |  TAIL | OFFSET  | TARGETS | EXCLUDES |
+// ------------------------------------------------
+// |  xxxx |  true | 100     | ERRO    |          |
+// ------------------------------------------------
 func (p *PsLog) List() string {
-	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS"}
+	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS", "EXCLUDES"}
 	buffer := new(bytes.Buffer)
 	buffer.WriteByte('\n')
 
@@ -454,6 +454,7 @@ func (p *PsLog) List() string {
 			base.ToString(v.Handler.Tail),
 			base.ToString(v.loadOffset()),
 			v.Handler.getTargetDump(),
+			v.Handler.getExcludesDump(),
 		}
 		table.Append(data)
 	}
