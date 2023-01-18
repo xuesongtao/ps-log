@@ -17,6 +17,10 @@ import (
 	tw "github.com/olekukonko/tablewriter"
 )
 
+const (
+	taskPoolWorkMaxLifetime int64 = 6 * 3600 // task pool 中 work 最大存活默认时间
+)
+
 // Opt
 type Opt func(*PsLog)
 
@@ -28,9 +32,13 @@ func WithAsync2Tos() Opt {
 }
 
 // WithTaskPoolSize 设置协程池大小
-func WithTaskPoolSize(size int) Opt {
+func WithTaskPoolSize(size int, workMaxLifetimeSec ...int64) Opt {
 	return func(pl *PsLog) {
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(6*3600))
+		defaultLife := taskPoolWorkMaxLifetime
+		if len(workMaxLifetimeSec) > 0 {
+			defaultLife = workMaxLifetimeSec[0]
+		}
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(defaultLife))
 	}
 }
 
@@ -75,7 +83,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg))
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
 	}
 
 	go obj.sentry()
