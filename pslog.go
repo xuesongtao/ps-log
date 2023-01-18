@@ -458,6 +458,8 @@ func (p *PsLog) List() string {
 	// table.SetBorder(false)
 	table.SetCenterSeparator("|")
 	// table.SetAutoMergeCells(true)
+	// table.SetAutoWrapText(false)
+	// table.SetNoWhiteSpace(false)
 	for k, v := range p.cloneLogMap() {
 		data := []string{
 			k,

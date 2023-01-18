@@ -97,17 +97,17 @@ func TestList(t *testing.T) {
 		Targets: []*Target{
 			{
 				Content:  "[ERRO]",
-				Excludes: []string{"1"},
+				Excludes: []string{"no rows in result set", "request params invaild", "cuxjswvirbg0", "ascriptId has no ew_account"},
 				To:       []PsLogWriter{&Stdout{}},
 			},
 			{
 				Content:  "1 ",
-				Excludes: []string{},
+				Excludes: []string{"test"},
 				To:       []PsLogWriter{&Stdout{}},
 			},
 			{
 				Content:  "2 ",
-				Excludes: []string{},
+				Excludes: []string{"test2"},
 				To:       []PsLogWriter{&Stdout{}},
 			},
 		},

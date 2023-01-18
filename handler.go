@@ -100,11 +100,7 @@ func (h *Handler) init() {
 func (h *Handler) getTargetDump() string {
 	data := ""
 	for _, v := range h.Targets {
-		if data == "" {
-			data += v.Content
-		} else {
-			data += ";" + v.Content
-		}
+		data += "【" + v.Content + "】"
 	}
 	return data
 }
@@ -123,12 +119,7 @@ func (h *Handler) getExcludesDump() string {
 		if es == "" {
 			continue
 		}
-		tmp := "【" + t.Content + "排除" + es + "】"
-		if data == "" {
-			data += tmp
-		} else {
-			data += ";" + tmp
-		}
+		data += "【" + t.Content + "排除" + es + "】"
 	}
 	return data
 }
