@@ -256,9 +256,7 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 
 // cronLog 定时解析 log
 func (p *PsLog) CronLogs() {
-	p.rwMu.RLock()
-	tmpLogMap := p.logMap
-	p.rwMu.RUnlock()
+	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
 		if fileInfo.Handler.Tail { // 跳过实时监听的
