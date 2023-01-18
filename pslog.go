@@ -445,7 +445,7 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 // ------------------------------------------------
 // |  PATH |  TAIL | OFFSET  | TARGETS | EXCLUDES |
 // ------------------------------------------------
-// |  xxxx |  true | 100     | ERRO    |          |
+// |  xxxx |  true | 100     |【 ERRO 】|          |
 // ------------------------------------------------
 func (p *PsLog) List() string {
 	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS", "EXCLUDES"}
@@ -455,11 +455,7 @@ func (p *PsLog) List() string {
 	table := tw.NewWriter(buffer)
 	table.SetHeader(header)
 	table.SetRowLine(true)
-	// table.SetBorder(false)
 	table.SetCenterSeparator("|")
-	// table.SetAutoMergeCells(true)
-	// table.SetAutoWrapText(false)
-	// table.SetNoWhiteSpace(false)
 	for k, v := range p.cloneLogMap() {
 		data := []string{
 			k,
