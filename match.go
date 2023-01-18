@@ -75,7 +75,7 @@ func newNode(b byte, root ...bool) *node {
 	obj := &node{
 		IsRoot: isRoot,
 		Data:   b,
-		Children: make(map[byte]*node),
+		Children: make(map[byte]*node, 1<<4),
 	}
 
 	if isRoot {
