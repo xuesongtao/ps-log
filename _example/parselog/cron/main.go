@@ -43,7 +43,7 @@ func main() {
 		defer fh.Close()
 
 		for i := 0; i < 10; i++ {
-			// time.Sleep(time.Microsecond)
+			time.Sleep(10 * time.Millisecond)
 			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
 			if err != nil {
 				log.Println("write err:", err)
@@ -71,5 +71,6 @@ func main() {
 	}
 
 stopFor:
-	fmt.Println("end...")
+	log.Println(ps.List())
+	log.Println("end...")
 }

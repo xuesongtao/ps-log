@@ -25,9 +25,9 @@ func main() {
 	tmp := "log/test.log"
 	handler := &pslog.Handler{
 		CleanOffset: true,
-		Change:   -1,
-		Tail:     true,
-		ExpireAt: pslog.NoExpire,
+		Change:      -1,
+		Tail:        true,
+		ExpireAt:    pslog.NoExpire,
 		Targets: []*pslog.Target{
 			{
 				Content:  " ",
@@ -48,9 +48,8 @@ func main() {
 		}
 		defer fh.Close()
 		for i := 0; i < 10; i++ {
-			// time.Sleep(time.Second)
+			time.Sleep(10 * time.Millisecond)
 			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
-			// _, err := f.WriteString(fmt.Sprint(i) + "\n")
 			if err != nil {
 				log.Println("write err:", err)
 			}
@@ -61,7 +60,8 @@ func main() {
 	if err := ps.AddPaths(tmp); err != nil {
 		panic(err)
 	}
-	
+
 	log.Println(ps.List())
-	for range closeCh {}
+	for range closeCh {
+	}
 }
