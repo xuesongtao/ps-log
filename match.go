@@ -58,12 +58,11 @@ type Tire struct {
 }
 
 type node struct {
-	isNull bool // 用于标记 tire 除根以外是否为空, 只在 root node 记录有效
-	IsRoot bool
-	IsEnd  bool
-	Data   byte
-	// Children [256]*node // TODO 待优化
-	Children map[byte]*node 
+	isNull   bool // 用于标记 tire 除根以外是否为空, 只在 root node 记录有效
+	IsRoot   bool
+	IsEnd    bool
+	Data     byte
+	Children map[byte]*node
 	target   *Target
 }
 
@@ -73,8 +72,8 @@ func newNode(b byte, root ...bool) *node {
 		isRoot = root[0]
 	}
 	obj := &node{
-		IsRoot: isRoot,
-		Data:   b,
+		IsRoot:   isRoot,
+		Data:     b,
 		Children: make(map[byte]*node, 1<<4),
 	}
 
