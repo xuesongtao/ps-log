@@ -42,7 +42,7 @@ func (s *Simple) GetTarget(target []byte) (*Target, bool) {
 }
 
 func (s *Simple) Search(target []byte) bool {
-	if len(s.match) == 0 {
+	if s.Null() {
 		return false
 	}
 	return bytes.Contains(target, s.match)
