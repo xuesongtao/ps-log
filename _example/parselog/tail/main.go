@@ -18,24 +18,27 @@ func main() {
 	}
 	defer ps.Close()
 
+	// 实时监听
 	if err := ps.TailLogs(); err != nil {
 		panic(err)
 	}
 
 	tmp := "log/test.log"
 	handler := &pslog.Handler{
-		CleanOffset: true,
-		Change:      -1,
-		Tail:        true,
-		ExpireAt:    pslog.NoExpire,
+		CleanOffset: true,           // 重新加载时, 清理已保存的 文件偏移量
+		Change:      -1,             // 每次都保存文件偏移量
+		Tail:        true,           // 实时监听
+		ExpireAt:    pslog.NoExpire, // 不过期
 		Targets: []*pslog.Target{
 			{
-				Content:  " ",
-				Excludes: []string{},
+				Content:  " ",        // 目标内容
+				Excludes: []string{}, // 排查内容
 				To:       []pslog.PsLogWriter{&pslog.Stdout{}},
 			},
 		},
 	}
+
+	// 注册
 	if err := ps.Register(handler); err != nil {
 		panic(err)
 	}
@@ -57,10 +60,12 @@ func main() {
 		close(closeCh)
 	}()
 
+	// 添加待监听的 path
 	if err := ps.AddPaths(tmp); err != nil {
 		panic(err)
 	}
 
+	// dump
 	log.Println(ps.List())
 	for range closeCh {
 	}

@@ -29,60 +29,68 @@ go get -u gitee.com/xuesongtao/ps-log
 
 ```go
 func main() {
- ps, err := pslog.NewPsLog(pslog.WithAsync2Tos())
- if err != nil {
-  panic(err)
- }
- defer ps.Close()
+	ps, err := pslog.NewPsLog(pslog.WithAsync2Tos())
+	if err != nil {
+		panic(err)
+	}
+	defer ps.Close()
 
- if err := ps.TailLogs(); err != nil {
-  panic(err)
- }
+	// 实时监听
+	if err := ps.TailLogs(); err != nil {
+		panic(err)
+	}
 
- tmp := "log/test.log"
- handler := &pslog.Handler{
-  CleanOffset: true,
-  Change:   -1,
-  Tail:     true,
-  ExpireAt: pslog.NoExpire,
-  Targets: []*pslog.Target{
-   {
-    Content:  " ",
-    Excludes: []string{},
-    To:       []pslog.PsLogWriter{&pslog.Stdout{}},
-   },
-  },
- }
- if err := ps.Register(handler); err != nil {
-  panic(err)
- }
- closeCh := make(chan int)
- go func() {
-  fh := xfile.NewFileHandle(tmp)
-  if err := fh.Initf(os.O_RDWR | os.O_APPEND | os.O_TRUNC); err != nil {
-   log.Println(err)
-   return
-  }
-  defer fh.Close()
-  for i := 0; i < 30; i++ {
-   time.Sleep(time.Second)
-   _, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
-   // _, err := f.WriteString(fmt.Sprint(i) + "\n")
-   if err != nil {
-    log.Println("write err:", err)
-   }
-  }
-  close(closeCh)
- }()
+	tmp := "log/test.log"
+	handler := &pslog.Handler{
+		CleanOffset: true,           // 重新加载时, 清理已保存的 文件偏移量
+		Change:      -1,             // 每次都保存文件偏移量
+		Tail:        true,           // 实时监听
+		ExpireAt:    pslog.NoExpire, // 不过期
+		Targets: []*pslog.Target{
+			{
+				Content:  " ",        // 目标内容
+				Excludes: []string{}, // 排查内容
+				To:       []pslog.PsLogWriter{&pslog.Stdout{}},
+			},
+		},
+	}
 
- if err := ps.AddPaths(tmp); err != nil {
-  panic(err)
- }
- for range closeCh {}
+	// 注册
+	if err := ps.Register(handler); err != nil {
+		panic(err)
+	}
+	closeCh := make(chan int)
+	go func() {
+		fh := xfile.NewFileHandle(tmp)
+		if err := fh.Initf(os.O_RDWR | os.O_APPEND | os.O_TRUNC); err != nil {
+			log.Println(err)
+			return
+		}
+		defer fh.Close()
+		for i := 0; i < 10; i++ {
+			time.Sleep(10 * time.Millisecond)
+			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+			if err != nil {
+				log.Println("write err:", err)
+			}
+		}
+		close(closeCh)
+	}()
+
+	// 添加待监听的 path
+	if err := ps.AddPaths(tmp); err != nil {
+		panic(err)
+	}
+
+	// dump
+	log.Println(ps.List())
+	for range closeCh {
+	}
 }
 ```
 
 #### 其他
+
 - 采集服务示例: [gitee](https://gitee.com/xuesongtao/collect-log.git)
 
 - 欢迎大佬们指正, 希望大佬给❤️，to [gitee](https://gitee.com/xuesongtao/ps-log.git), [github](https://github.com/xuesongtao/ps-log.git)
