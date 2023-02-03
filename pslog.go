@@ -67,6 +67,7 @@ type PsLog struct {
 // NewPsLog 是根据提供的 log path 进行逐行解析
 // 注: 结束时需要调用 Close
 func NewPsLog(opts ...Opt) (*PsLog, error) {
+	fmt.Print(consoleLogo)
 	obj := &PsLog{
 		logMap:  make(map[string]*FileInfo),
 		handler: new(Handler),
