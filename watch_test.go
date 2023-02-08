@@ -19,8 +19,12 @@ func TestWatch(t *testing.T) {
 	go w.Watch(bus)
 
 	t.Log(w.WatchList())
-	
+
+	// for b := range bus {
+	// 	t.Log(b.Path)
+	// }
+
 	time.Sleep(5 * time.Second)
 	w.Close()
-	time.Sleep(2*time.Second)
+	time.Sleep(2 * time.Second)
 }

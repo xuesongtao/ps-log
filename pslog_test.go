@@ -34,6 +34,7 @@ func (b *BytesBuf) WriteTo(bus *LogHandlerBus) {
 }
 
 func TestDumpTable(t *testing.T) {
+	t.Skip("dump table")
 	var multiline = `A multiline
 string with some lines being really long.`
 

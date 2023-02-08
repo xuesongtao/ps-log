@@ -1,13 +1,15 @@
 package pslog
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strings"
 
+	"gitee.com/xuesongtao/gotool/base"
 	fs "github.com/fsnotify/fsnotify"
+	tw "github.com/olekukonko/tablewriter"
 )
 
 // Watch 监听的文件
@@ -18,9 +20,8 @@ type Watch struct {
 
 // WatchFileInfo
 type WatchFileInfo struct {
-	IsDir         bool   // 是否为目录
-	Path          string // 原始添加的文件路径, 这里可能是文件路径或目录路径
-	WatchFilePath string // 监听到的变化的文件全路径
+	IsDir bool   // 是否为目录
+	Path  string // 原始添加的文件路径, 这里可能是文件路径或目录路径
 }
 
 // NewWatch 监听
@@ -60,7 +61,7 @@ func (w *Watch) Add(paths ...string) error {
 		// 保存和监听
 		w.fileMap[path] = watchFileInfo
 		if err := w.watcher.Add(path); err != nil {
-			return fmt.Errorf("add %q is failed, err: %v", path, err)
+			return fmt.Errorf("w.watcher.Add is failed, err: %v", err)
 		}
 	}
 	return nil
@@ -72,7 +73,7 @@ func (w *Watch) Remove(paths ...string) error {
 		path = filepath.Clean(path)
 		delete(w.fileMap, path)
 		if err := w.watcher.Remove(path); err != nil {
-			return fmt.Errorf("remove %q is failed, err: %v", path, err)
+			return fmt.Errorf("w.watcher.Remove is failed, err: %v", err)
 		}
 	}
 	return nil
@@ -92,7 +93,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 			close(busCh)
 			w.fileMap = nil
 			if err := recover(); err != nil {
-				plg.Error("recover err:", debug.Stack())
+				plg.Error("Watch recover err:", debug.Stack())
 			}
 		}()
 
@@ -154,12 +155,28 @@ func (w *Watch) inEvenOps(target fs.Op, ins ...fs.Op) bool {
 }
 
 // WatchList 查询监听的所有 path
+// 格式:
+// ----------------------
+// |  WATCH-PATH |  DIR |
+// ----------------------
+// |  xxxx       |  true |
+// -----------------------
 func (w *Watch) WatchList() string {
-	buf := new(strings.Builder)
-	defer buf.Reset()
+	header := []string{"WATCH-PATH", "DIR"}
+	buffer := new(bytes.Buffer)
+	buffer.WriteByte('\n')
 
-	for path := range w.fileMap {
-		buf.WriteString(path + "\n")
+	table := tw.NewWriter(buffer)
+	table.SetHeader(header)
+	table.SetRowLine(true)
+	table.SetCenterSeparator("|")
+	for path, watchFileInfo := range w.fileMap {
+		data := []string{
+			path,
+			base.ToString(watchFileInfo.IsDir),
+		}
+		table.Append(data)
 	}
-	return buf.String()
+	table.Render()
+	return buffer.String()
 }
