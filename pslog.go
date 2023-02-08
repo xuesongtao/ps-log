@@ -51,7 +51,7 @@ func WithCleanUpTime(dur time.Duration) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail        bool // 是否需要实时分析
+	tail        bool // 是否已开启实时分析
 	async2Tos   bool // 是否异步处理 tos
 	closed      bool
 	cleanUpTime time.Duration // 清理 logMap 的周期
@@ -97,7 +97,7 @@ func (p *PsLog) Register(handler *Handler) error {
 	return p.handler.Valid()
 }
 
-// AddPaths 添加 path, path 必须为文件全路径
+// AddPaths 添加 path, path 必须为文件全路径, 如果 path 已存在则跳过, 反之新增
 // 根据 p.handler 进行处理
 func (p *PsLog) AddPaths(paths ...string) error {
 	path2HandlerMap := make(map[string]*Handler, len(paths))
@@ -107,16 +107,56 @@ func (p *PsLog) AddPaths(paths ...string) error {
 	return p.addLogPath(path2HandlerMap)
 }
 
-// AddPath2Handler 单个添加
+// AddPath2Handler 单个添加, 如果 path 已存在则跳过, 反之新增
 // 会根据文件对应的 Handler 进行处理, 如果为 Handler 为 nil, 会按 p.handler 来处理
 func (p *PsLog) AddPath2Handler(path string, handler *Handler) error {
 	return p.addLogPath(map[string]*Handler{path: handler})
 }
 
-// AddPath2HandlerMap 添加文件对应的处理方法
+// ReplacePath2Handler 新增文件对应的处理方法, 如果 path 已存在则替换, 反之新增
+func (p *PsLog) ReplacePath2Handler(path2HandlerMap map[string]*Handler) error {
+	return p.addLogPath(path2HandlerMap, false)
+}
+
+// AddPath2HandlerMap 添加文件对应的处理方法, 如果 path 已存在则跳过, 反之新增
 // 会根据文件对应的 Handler 进行处理, 如果为 Handler 为 nil, 会按 p.handler 来处理
 func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 	return p.addLogPath(path2HandlerMap)
+}
+
+// addLogPath 添加 log path, 同时添加监听 log path
+func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...bool) error {
+	defaultExistSkip := true // 默认新增, 存在跳过
+	if len(existSkip) > 0 {
+		defaultExistSkip = existSkip[0]
+	}
+
+	new, err := p.prePath2Handler(path2HandlerMap)
+	if err != nil {
+		return err
+	}
+	// plg.Info("new:", base.ToString(new))
+	// 加锁处理
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
+	for path, handler := range new {
+		if _, ok := p.logMap[path]; ok && defaultExistSkip {
+			continue
+		}
+
+		// 保存 file
+		fileInfo := &FileInfo{Handler: handler}
+		fileInfo.Parse(path)
+		fileInfo.initOffset()
+		p.logMap[path] = fileInfo
+		if p.tail && handler.Tail {
+			if err := p.watch.Add(path); err != nil {
+				return fmt.Errorf("p.watch.Add is failed, err: %v", err)
+			}
+		}
+	}
+	// plg.Info("logMap:", base.ToString(p.logMap))
+	return nil
 }
 
 // prePath2Handler 预处理
@@ -155,36 +195,6 @@ func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string
 		new[path] = handler
 	}
 	return new, nil
-}
-
-// addLogPath 添加 log path, 同时添加监听 log path
-func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler) error {
-	new, err := p.prePath2Handler(path2HandlerMap)
-	if err != nil {
-		return err
-	}
-	// plg.Info("new:", base.ToString(new))
-	// 加锁处理
-	p.rwMu.Lock()
-	defer p.rwMu.Unlock()
-	for path, handler := range new {
-		if _, ok := p.logMap[path]; ok {
-			continue
-		}
-
-		// 保存 file
-		fileInfo := &FileInfo{Handler: handler}
-		fileInfo.Parse(path)
-		fileInfo.initOffset()
-		p.logMap[path] = fileInfo
-		if p.tail && handler.Tail {
-			if err := p.watch.Add(path); err != nil {
-				return fmt.Errorf("p.watch.Add is failed, err: %v", err)
-			}
-		}
-	}
-	// plg.Info("logMap:", base.ToString(p.logMap))
-	return nil
 }
 
 // Close 释放资源
@@ -284,7 +294,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	f := fh.GetFile()
 	st, err := f.Stat()
 	if err != nil {
-		plg.Error("f.Stat %q is failed, err: %v", fileInfo.FileName(), err)
+		plg.Error("f.Stat is failed, err:", err)
 		return
 	}
 
