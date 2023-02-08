@@ -114,8 +114,9 @@ func (p *PsLog) AddPath2Handler(path string, handler *Handler) error {
 }
 
 // ReplacePath2Handler 新增文件对应的处理方法, 如果 path 已存在则替换, 反之新增
-func (p *PsLog) ReplacePath2Handler(path2HandlerMap map[string]*Handler) error {
-	return p.addLogPath(path2HandlerMap, false)
+// 会根据文件对应的 Handler 进行处理, 如果为 Handler 为 nil, 会按 p.handler 来处理
+func (p *PsLog) ReplacePath2Handler(path string, handler *Handler) error {
+	return p.addLogPath(map[string]*Handler{path: handler}, false)
 }
 
 // AddPath2HandlerMap 添加文件对应的处理方法, 如果 path 已存在则跳过, 反之新增
