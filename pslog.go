@@ -451,14 +451,22 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 }
 
 // List 返回待处理的内容
+// printTarget 是否打印 TARGETS, EXCLUDES(因为这两个可能会很多), 默认 true
 // 格式:
-// ------------------------------------------------
-// |  PATH |  TAIL | OFFSET  | TARGETS | EXCLUDES |
-// ------------------------------------------------
-// |  xxxx |  true | 100     |【 ERRO 】|          |
-// ------------------------------------------------
-func (p *PsLog) List() string {
-	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS", "EXCLUDES"}
+// ----------------------------------------------------------------------
+// |  PATH |      EXPIRE         |  TAIL | OFFSET  | TARGETS | EXCLUDES |
+// ----------------------------------------------------------------------
+// |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 100     |【 ERRO 】|          |
+// ----------------------------------------------------------------------
+func (p *PsLog) List(printTarget ...bool) string {
+	defaultPrintTarget := true
+	if len(printTarget) > 0 {
+		defaultPrintTarget = printTarget[0]
+	}
+	header := []string{"PATH", "EXPIRE", "TAIL", "OFFSET"}
+	if defaultPrintTarget {
+		header = append(header, "TARGETS", "EXCLUDES")
+	}
 	buffer := new(bytes.Buffer)
 	buffer.WriteByte('\n')
 
@@ -466,13 +474,16 @@ func (p *PsLog) List() string {
 	table.SetHeader(header)
 	table.SetRowLine(true)
 	table.SetCenterSeparator("|")
+	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
 		data := []string{
 			k,
+			v.Handler.ExpireAt.Format(base.DatetimeFmt),
 			base.ToString(v.Handler.Tail),
 			base.ToString(v.loadOffset()),
-			v.Handler.getTargetDump(),
-			v.Handler.getExcludesDump(),
+		}
+		if defaultPrintTarget {
+			data = append(data, v.Handler.getTargetDump(), v.Handler.getExcludesDump())
 		}
 		table.Append(data)
 	}
