@@ -391,18 +391,18 @@ func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
 
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
-	for _, data := range dataMap {
-		if data.skip() {
+	for _, bus := range dataMap {
+		if bus.skip() {
 			continue
 		}
-		for _, to := range data.tos {
+		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				p.taskPool.Submit(func() {
-					to.WriteTo(data)
+					to.WriteTo(bus)
 				})
 				continue
 			}
-			to.WriteTo(data)
+			to.WriteTo(bus)
 		}
 	}
 }
