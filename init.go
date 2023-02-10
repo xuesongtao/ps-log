@@ -1,12 +1,16 @@
 package pslog
 
 import (
+	"time"
+
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
+	plg "gitee.com/xuesongtao/ps-log/log"
 )
 
 const (
-	defaultHandleChange = 100
+	defaultHandleChange    = 100 // 默认记录 offset 变化的次数
+	defaultMultiLineMaxDur = time.Second
 
 	// 控制台 logo
 	consoleLogo string = `   
@@ -22,6 +26,11 @@ ______    ______         |  |    ____     ____
 )
 
 var (
-	filePool = xfile.NewFilePool()                          // 文件池
+	filePool = xfile.NewFilePool().Print(false)             // 文件池
 	NoExpire = base.Datetime2TimeObj("9999-12-31 23:59:59") // 不过期
 )
+
+// SetLogger 设置 logger
+func SetLogger(l plg.PsLogger) {
+	plg.Plg = l
+}

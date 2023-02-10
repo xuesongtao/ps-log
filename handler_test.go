@@ -5,5 +5,4 @@ import (
 )
 
 func TestTmp(t *testing.T) {
-	plg.Info("tes")
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
+	plg "gitee.com/xuesongtao/ps-log/log"
 	tl "gitee.com/xuesongtao/taskpool"
 	tw "github.com/olekukonko/tablewriter"
 )
@@ -38,7 +39,7 @@ func WithTaskPoolSize(size int, workMaxLifetimeSec ...int64) Opt {
 		if len(workMaxLifetimeSec) > 0 {
 			defaultLife = workMaxLifetimeSec[0]
 		}
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(defaultLife))
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(defaultLife))
 	}
 }
 
@@ -84,7 +85,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
 	}
 
 	go obj.sentry()
@@ -314,28 +315,29 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	// 逐行读取
 	rows := bufio.NewScanner(f)
 	readSize := fileInfo.offset
-	dataMap := make(map[int]*LogHandlerBus, 1<<6) // key: target.no
+	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no
+	handler := fileInfo.Handler
 	for rows.Scan() {
 		// 保证本次读取内容小于 fileSize
 		if readSize > fileSize {
 			break
 		}
-		data := rows.Bytes()
-		readSize += int64(len(data))
-		target, ok := p.parse(fileInfo.Handler, data)
-		if !ok {
+		// 处理行内容, 解决日志中可能出现的换行, 如: err stack
+		if !handler.MergeLine.Append(rows.Bytes()) {
 			continue
 		}
 
-		// plg.Info("target:", base.ToString(target))
-		// 按不同内容进行处理
-		if handler, ok := dataMap[target.no]; !ok {
-			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
-			bus.Write(data)
-			dataMap[target.no] = bus
-		} else {
-			handler.Write(data)
-		}
+		line := handler.MergeLine.Line()
+		p.handleLine(fileInfo, dataMap, line)
+		readSize += int64(len(line))
+	}
+
+	// 说明还有内容没有读取完
+	if readSize < fileSize {
+		line := handler.MergeLine.Residue()
+		residue := len(line)
+		plg.Infof("fileSize: %d, readSize: %d, residue: %d, total: %d", fileSize, readSize, residue, readSize+int64(residue))
+		p.handleLine(fileInfo, dataMap, line)
 	}
 
 	// plg.Info("dataMap:", base.ToString(dataMap))
@@ -348,6 +350,24 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	p.taskPool.Submit(func() {
 		fileInfo.saveOffset(fileSize)
 	})
+}
+
+// handleLine 处理 line 内容
+func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, line []byte) {
+	target, ok := p.parse(fileInfo.Handler, line)
+	if !ok {
+		return
+	}
+
+	// plg.Info("target:", base.ToString(target))
+	// 按不同内容进行处理
+	if handler, ok := dataMap[target.no]; !ok {
+		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
+		bus.Write(line)
+		dataMap[target.no] = bus
+	} else {
+		handler.Write(line)
+	}
 }
 
 // HasClose 是否已经关闭

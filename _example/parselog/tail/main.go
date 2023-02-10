@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
 	pslog "gitee.com/xuesongtao/ps-log"
+	"gitee.com/xuesongtao/ps-log/line"
 )
 
 func main() {
@@ -24,11 +26,17 @@ func main() {
 	}
 
 	tmp := "log/test.log"
+	mergeLine := line.NewMulti()
+	if err := mergeLine.StartPattern(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d{3}`); err != nil {
+		panic(err)
+	}
 	handler := &pslog.Handler{
 		CleanOffset: true,           // 重新加载时, 清理已保存的 文件偏移量
 		Change:      -1,             // 每次都保存文件偏移量
 		Tail:        true,           // 实时监听
 		ExpireAt:    pslog.NoExpire, // 不过期
+		// 以时间格式开头, 如: 2023-02-10 16:13:53.441
+		// MergeLine: mergeLine,
 		Targets: []*pslog.Target{
 			{
 				Content:  " ",        // 目标内容
@@ -50,12 +58,22 @@ func main() {
 			return
 		}
 		defer fh.Close()
-		for i := 0; i < 10; i++ {
-			time.Sleep(10 * time.Millisecond)
-			_, err := fh.AppendContent(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+		appendContent := func(content string) {
+			_, err := fh.AppendContent(content)
 			if err != nil {
 				log.Println("write err:", err)
 			}
+			time.Sleep(time.Second)
+		}
+		for i := 0; i <= 10; i++ {
+			// 前缀
+			timeStr := time.Now().Format(base.DatetimeFmt+".000") + " "
+			content := timeStr + fmt.Sprint(i) + "\n"
+			if i%5 == 0 {
+				// 模拟 stack
+				content = timeStr + string(debug.Stack())
+			}
+			appendContent(content)
 		}
 		close(closeCh)
 	}()
