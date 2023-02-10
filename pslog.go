@@ -314,30 +314,29 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 
 	// 逐行读取
 	rows := bufio.NewScanner(f)
-	readSize := fileInfo.offset
+	readSize := fileInfo.offset                   // 已读数
 	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no
 	handler := fileInfo.Handler
 	for rows.Scan() {
-		// 保证本次读取内容小于 fileSize
+		// 因为当前读为快照读, 所以需要保证本次读取内容小于 fileSize (快照时文件的大小)
 		if readSize > fileSize {
 			break
 		}
 		// 处理行内容, 解决日志中可能出现的换行, 如: err stack
-		if !handler.MergeLine.Append(rows.Bytes()) {
+		if !handler.MergeRule.Append(rows.Bytes()) {
 			continue
 		}
 
-		line := handler.MergeLine.Line()
+		line := handler.MergeRule.Line()
 		p.handleLine(fileInfo, dataMap, line)
 		readSize += int64(len(line))
 	}
 
 	// 说明还有内容没有读取完
 	if readSize < fileSize {
-		line := handler.MergeLine.Residue()
-		residue := len(line)
-		plg.Infof("fileSize: %d, readSize: %d, residue: %d, total: %d", fileSize, readSize, residue, readSize+int64(residue))
-		p.handleLine(fileInfo, dataMap, line)
+		// residue := len(handler.MergeLine.Residue())
+		// plg.Infof("fileSize: %d, readSize: %d, residue: %d, total: %d", fileSize, readSize, residue, readSize+int64(residue))
+		p.handleLine(fileInfo, dataMap, handler.MergeRule.Residue())
 	}
 
 	// plg.Info("dataMap:", base.ToString(dataMap))
