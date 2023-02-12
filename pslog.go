@@ -378,6 +378,10 @@ func (p *PsLog) HasClose() bool {
 
 // parse 需要处理
 func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
+	if h == nil {
+		return nil, false
+	}
+
 	if h.targets.Null() {
 		return nil, false
 	}
