@@ -1,16 +1,13 @@
 package pslog
 
 import (
-	"time"
-
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
 	plg "gitee.com/xuesongtao/ps-log/log"
 )
 
 const (
-	defaultHandleChange    = 100 // 默认记录 offset 变化的次数
-	defaultMultiLineMaxDur = time.Second
+	defaultHandleChange = 100 // 默认记录 offset 变化的次数
 
 	// 控制台 logo
 	consoleLogo string = `   
