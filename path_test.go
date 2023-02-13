@@ -6,7 +6,7 @@ import (
 	"gitee.com/xuesongtao/gotool/base"
 )
 
-func TestParseLogPath(t *testing.T) {
+func TestParseLogPath1(t *testing.T) {
 	obj := NewLogPath()
 	obj.SetExcludeProjectDir("tmp/project/test1.log")
 	path := make([]*ProjectLog, 0)
