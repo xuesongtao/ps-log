@@ -142,6 +142,9 @@ type LogHandlerBus struct {
 }
 
 func (l *LogHandlerBus) skip() bool {
+	if l.buf.Len() == 0 {
+		return true
+	}
 	l.Msg = l.buf.String()
 	l.buf.Reset()
 	return l.Msg == ""
