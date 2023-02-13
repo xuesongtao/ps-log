@@ -133,6 +133,7 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		defaultExistSkip = existSkip[0]
 	}
 
+	// 预处理可以不在 lock 范围内, 调用时不会出现并发调用
 	new, err := p.prePath2Handler(path2HandlerMap)
 	if err != nil {
 		return err
