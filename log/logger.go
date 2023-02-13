@@ -1,4 +1,4 @@
-package pslog
+package log
 
 import (
 	"fmt"
@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"sync"
 )
 
 type PsLogger interface {
@@ -20,68 +19,60 @@ type PsLogger interface {
 }
 
 var (
-	plg  PsLogger = newDefaultLogger()
-	once sync.Once
+	Plg PsLogger = DefaultLogger()
 )
-
-// SetLogger 设置 pl
-func SetLogger(l PsLogger) {
-	once.Do(func() {
-		plg = l
-	})
-}
 
 type defaultLogger struct {
 	log *log.Logger
 }
 
-func newDefaultLogger() *defaultLogger {
+func DefaultLogger() *defaultLogger {
 	return &defaultLogger{
 		log: log.New(os.Stdout, "", log.LstdFlags),
 	}
 }
 
 func (d *defaultLogger) Info(v ...interface{}) {
-	d.log.Println(append([]interface{}{"[INFO] " + d.getPrefix(3)}, v...)...)
+	d.log.Println(append([]interface{}{"[INFO] " + d.getPrefix(4)}, v...)...)
 }
 
 func (d *defaultLogger) Infof(format string, v ...interface{}) {
-	d.log.Printf("[INFO] "+d.getPrefix(3)+" "+format, v...)
+	d.log.Printf("[INFO] "+d.getPrefix(4)+" "+format, v...)
 }
 
 func (d *defaultLogger) Error(v ...interface{}) {
-	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(3)}, v...)...)
+	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(4)}, v...)...)
 }
 
 func (d *defaultLogger) Errorf(format string, v ...interface{}) {
-	d.log.Printf("[ERRO] "+d.getPrefix(3)+" "+format, v...)
+	d.log.Printf("[ERRO] "+d.getPrefix(4)+" "+format, v...)
 }
 
 func (d *defaultLogger) Warning(v ...interface{}) {
-	d.log.Println(append([]interface{}{"[WARN] " + d.getPrefix(3)}, v...)...)
+	d.log.Println(append([]interface{}{"[WARN] " + d.getPrefix(4)}, v...)...)
 }
 
 func (d *defaultLogger) Warningf(format string, v ...interface{}) {
-	d.log.Printf("[WARN] "+d.getPrefix(3)+" "+format, v...)
+	d.log.Printf("[WARN] "+d.getPrefix(4)+" "+format, v...)
 }
 
 func (d *defaultLogger) Fatal(v ...interface{}) {
-	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(3)}, v...)...)
+	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(4)}, v...)...)
 	os.Exit(1)
 }
 
 func (d *defaultLogger) Fatalf(format string, v ...interface{}) {
-	d.log.Printf("[ERRO] "+d.getPrefix(3)+" "+format, v...)
+	d.log.Printf("[ERRO] "+d.getPrefix(4)+" "+format, v...)
 	os.Exit(1)
 }
 
 func (d *defaultLogger) Panic(v ...interface{}) {
-	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(3)}, v...)...)
+	d.log.Println(append([]interface{}{"[ERRO] " + d.getPrefix(4)}, v...)...)
 	panic(fmt.Sprint(v...))
 }
 
 func (d *defaultLogger) Panicf(format string, v ...interface{}) {
-	d.log.Printf("[ERRO] "+d.getPrefix(3)+" "+format, v...)
+	d.log.Printf("[ERRO] "+d.getPrefix(4)+" "+format, v...)
 	panic(fmt.Sprintf(format, v...))
 }
 

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"gitee.com/xuesongtao/ps-log/line"
 )
 
 type PsLogWriter interface {
@@ -34,6 +36,7 @@ type Handler struct {
 	Change      int32         // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
 	ExpireDur   time.Duration // 文件句柄过期间隔, 常用于全局配置
 	ExpireAt    time.Time     // 文件句柄过期时间, 优先 ExpireDur 如: 2022-12-03 11:11:10
+	MergeRule   line.Merger   // 日志文件行合并规则, 默认 单行处理
 	targets     Matcher
 	Targets     []*Target // 目标 msg
 	Ext         string    // 外部存入, 回调返回
@@ -75,6 +78,10 @@ func (h *Handler) init() {
 
 	if h.ExpireAt.IsZero() {
 		h.ExpireAt = time.Now().Add(h.ExpireDur)
+	}
+
+	if h.MergeRule == nil {
+		h.MergeRule = line.NewSing()
 	}
 
 	// 预处理 targets, exclude

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
+	plg "gitee.com/xuesongtao/ps-log/log"
 	tl "gitee.com/xuesongtao/taskpool"
 	tw "github.com/olekukonko/tablewriter"
 )
@@ -38,7 +39,7 @@ func WithTaskPoolSize(size int, workMaxLifetimeSec ...int64) Opt {
 		if len(workMaxLifetimeSec) > 0 {
 			defaultLife = workMaxLifetimeSec[0]
 		}
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(defaultLife))
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(defaultLife))
 	}
 }
 
@@ -84,7 +85,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
 	}
 
 	go obj.sentry()
@@ -259,7 +260,7 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
 			}
-			p.parseLog(fileInfo) // 防止在解析的时候, fileInfo 变化
+			p.parseLog(fileInfo)
 		}
 		plg.Info("watchCh is closed")
 	}()
@@ -313,29 +314,29 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 
 	// 逐行读取
 	rows := bufio.NewScanner(f)
-	readSize := fileInfo.offset
-	dataMap := make(map[int]*LogHandlerBus, 1<<6) // key: target.no
+	readSize := fileInfo.offset                   // 已读数
+	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no
+	handler := fileInfo.Handler
 	for rows.Scan() {
-		// 保证本次读取内容小于 fileSize
+		// 因为当前读为快照读, 所以需要保证本次读取内容小于 fileSize (快照时文件的大小)
 		if readSize > fileSize {
 			break
 		}
-		data := rows.Bytes()
-		readSize += int64(len(data))
-		target, ok := p.parse(fileInfo.Handler, data)
-		if !ok {
+		// 处理行内容, 解决日志中可能出现的换行, 如: err stack
+		if !handler.MergeRule.Append(rows.Bytes()) {
 			continue
 		}
 
-		// plg.Info("target:", base.ToString(target))
-		// 按不同内容进行处理
-		if handler, ok := dataMap[target.no]; !ok {
-			bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
-			bus.Write(data)
-			dataMap[target.no] = bus
-		} else {
-			handler.Write(data)
-		}
+		line := handler.MergeRule.Line()
+		p.handleLine(fileInfo, dataMap, line)
+		readSize += int64(len(line))
+	}
+
+	// 说明还有内容没有读取完
+	if readSize < fileSize {
+		// residue := len(handler.MergeLine.Residue())
+		// plg.Infof("fileSize: %d, readSize: %d, residue: %d, total: %d", fileSize, readSize, residue, readSize+int64(residue))
+		p.handleLine(fileInfo, dataMap, handler.MergeRule.Residue())
 	}
 
 	// plg.Info("dataMap:", base.ToString(dataMap))
@@ -350,6 +351,35 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	})
 }
 
+// handleLine 处理 line 内容
+func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, line []byte) {
+	// 判断下是否需要过滤掉
+	handler := fileInfo.Handler
+	if handler == nil {
+		return
+	}
+	if handler.targets.Null() {
+		return
+	}
+	target, ok := handler.targets.GetTarget(line)
+	if !ok {
+		return
+	}
+	if target.excludes.Search(line) {
+		return
+	}
+
+	// plg.Info("target:", base.ToString(target))
+	// 按不同内容进行处理
+	if handler, ok := dataMap[target.no]; !ok {
+		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
+		bus.Write(line)
+		dataMap[target.no] = bus
+	} else {
+		handler.Write(line)
+	}
+}
+
 // HasClose 是否已经关闭
 func (p *PsLog) HasClose() bool {
 	p.rwMu.RLock()
@@ -357,32 +387,20 @@ func (p *PsLog) HasClose() bool {
 	return p.closed
 }
 
-// parse 需要处理
-func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
-	if h.targets.Null() {
-		return nil, false
-	}
-	target, ok := h.targets.GetTarget(row)
-	if !ok {
-		return nil, false
-	}
-	return target, !target.excludes.Search(row)
-}
-
 // writer 写入目标, 默认同步处理
 func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
-	for _, data := range dataMap {
-		if data.skip() {
+	for _, bus := range dataMap {
+		if bus.skip() {
 			continue
 		}
-		for _, to := range data.tos {
+		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				p.taskPool.Submit(func() {
-					to.WriteTo(data)
+					to.WriteTo(bus)
 				})
 				continue
 			}
-			to.WriteTo(data)
+			to.WriteTo(bus)
 		}
 	}
 }
@@ -451,14 +469,22 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 }
 
 // List 返回待处理的内容
+// printTarget 是否打印 TARGETS, EXCLUDES(因为这两个可能会很多), 默认 true
 // 格式:
-// ------------------------------------------------
-// |  PATH |  TAIL | OFFSET  | TARGETS | EXCLUDES |
-// ------------------------------------------------
-// |  xxxx |  true | 100     |【 ERRO 】|          |
-// ------------------------------------------------
-func (p *PsLog) List() string {
-	header := []string{"PATH", "TAIL", "OFFSET", "TARGETS", "EXCLUDES"}
+// ----------------------------------------------------------------------
+// |  PATH |      EXPIRE         |  TAIL | OFFSET  | TARGETS | EXCLUDES |
+// ----------------------------------------------------------------------
+// |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 100     |【 ERRO 】|          |
+// ----------------------------------------------------------------------
+func (p *PsLog) List(printTarget ...bool) string {
+	defaultPrintTarget := true
+	if len(printTarget) > 0 {
+		defaultPrintTarget = printTarget[0]
+	}
+	header := []string{"PATH", "EXPIRE", "TAIL", "OFFSET"}
+	if defaultPrintTarget {
+		header = append(header, "TARGETS", "EXCLUDES")
+	}
 	buffer := new(bytes.Buffer)
 	buffer.WriteByte('\n')
 
@@ -466,13 +492,16 @@ func (p *PsLog) List() string {
 	table.SetHeader(header)
 	table.SetRowLine(true)
 	table.SetCenterSeparator("|")
+	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
 		data := []string{
 			k,
+			v.Handler.ExpireAt.Format(base.DatetimeFmt),
 			base.ToString(v.Handler.Tail),
 			base.ToString(v.loadOffset()),
-			v.Handler.getTargetDump(),
-			v.Handler.getExcludesDump(),
+		}
+		if defaultPrintTarget {
+			data = append(data, v.Handler.getTargetDump(), v.Handler.getExcludesDump())
 		}
 		table.Append(data)
 	}
