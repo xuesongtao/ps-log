@@ -260,7 +260,7 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
 			}
-			p.parseLog(fileInfo) // 防止在解析的时候, fileInfo 变化
+			p.parseLog(fileInfo)
 		}
 		plg.Info("watchCh is closed")
 	}()
