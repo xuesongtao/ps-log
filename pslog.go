@@ -353,8 +353,19 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 
 // handleLine 处理 line 内容
 func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, line []byte) {
-	target, ok := p.parse(fileInfo.Handler, line)
+	// 判断下是否需要过滤掉
+	handler := fileInfo.Handler
+	if handler == nil {
+		return
+	}
+	if handler.targets.Null() {
+		return
+	}
+	target, ok := handler.targets.GetTarget(line)
 	if !ok {
+		return
+	}
+	if target.excludes.Search(line) {
 		return
 	}
 
@@ -374,22 +385,6 @@ func (p *PsLog) HasClose() bool {
 	p.rwMu.RLock()
 	defer p.rwMu.RUnlock()
 	return p.closed
-}
-
-// parse 需要处理
-func (p *PsLog) parse(h *Handler, row []byte) (*Target, bool) {
-	if h == nil {
-		return nil, false
-	}
-
-	if h.targets.Null() {
-		return nil, false
-	}
-	target, ok := h.targets.GetTarget(row)
-	if !ok {
-		return nil, false
-	}
-	return target, !target.excludes.Search(row)
 }
 
 // writer 写入目标, 默认同步处理
