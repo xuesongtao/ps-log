@@ -133,7 +133,8 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		defaultExistSkip = existSkip[0]
 	}
 
-	new, err := p.prePath2Handler(path2HandlerMap)
+	// 预处理
+	new, err := p.prePath2Handler(defaultExistSkip, path2HandlerMap)
 	if err != nil {
 		return err
 	}
@@ -142,33 +143,39 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 	for path, handler := range new {
-		if _, ok := p.logMap[path]; ok && defaultExistSkip {
+		fileInfo, ok := p.logMap[path]
+		if ok && defaultExistSkip {
 			continue
 		}
 
 		// 保存 file
-		fileInfo := &FileInfo{Handler: handler}
-		fileInfo.Parse(path)
-		fileInfo.initOffset()
-		p.logMap[path] = fileInfo
+		if ok {
+			fileInfo.Handler = handler
+		} else {
+			fileInfo = &FileInfo{Handler: handler}
+			fileInfo.Parse(path)
+			fileInfo.initOffset()
+		}
 		if p.tail && handler.Tail {
-			if err := p.watch.Add(path); err != nil {
+			// 直接监听对应的目录
+			if err := p.watch.Add(fileInfo.FileName()); err != nil {
 				return fmt.Errorf("p.watch.Add is failed, err: %v", err)
 			}
 		}
+		p.logMap[path] = fileInfo
 	}
 	// plg.Info("logMap:", base.ToString(p.logMap))
 	return nil
 }
 
 // prePath2Handler 预处理
-func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
-	tmp := p.cloneLogMap()
+func (p *PsLog) prePath2Handler(existSkip bool, path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+	logPathTmp := p.cloneLogMap()
 
 	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
-		if _, ok := tmp[path]; ok {
+		if _, ok := logPathTmp[path]; ok && existSkip {
 			continue
 		}
 
@@ -434,20 +441,27 @@ func (p *PsLog) sentry() {
 }
 
 func (p *PsLog) cleanUp(t time.Time) {
-	tmpLogMap := p.cloneLogMap(true)
-	deleteKeys := make([]string, 0, len(tmpLogMap))
-	for path, fileInfo := range tmpLogMap {
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
+
+	// 处理过期的 path
+	deleteKeys := make([]string, 0, len(p.logMap))
+	for path, fileInfo := range p.logMap {
 		if fileInfo.IsExpire(t) {
 			deleteKeys = append(deleteKeys, path)
 		}
 	}
-	for _, path := range deleteKeys {
-		delete(tmpLogMap, path)
+
+	if len(deleteKeys) == 0 {
+		return
 	}
 
-	p.rwMu.Lock()
-	p.logMap = tmpLogMap
-	p.rwMu.Unlock()
+	// 1. 移除监听的 path,
+	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理
+	for _, path := range deleteKeys {
+		delete(p.logMap, path)
+	}
+	p.watch.Remove(deleteKeys...)
 }
 
 func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {

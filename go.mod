@@ -3,8 +3,8 @@ module gitee.com/xuesongtao/ps-log
 go 1.14
 
 require (
-	gitee.com/xuesongtao/gotool v1.2.20
+	gitee.com/xuesongtao/gotool v1.2.25
 	gitee.com/xuesongtao/taskpool v1.2.4
-	github.com/olekukonko/tablewriter v0.0.5
 	github.com/fsnotify/fsnotify v1.6.0
+	github.com/olekukonko/tablewriter v0.0.5
 )

@@ -89,15 +89,17 @@ func (f *FileInfo) loadOffset() int64 {
 
 // initOffset 初始化文件 offset
 func (f *FileInfo) initOffset() {
+	// 初次使用需要判断下是否需要清除偏移量
+	if f.cleanOffset() {
+		return
+	}
+
 	// 需要判断下是否已处理过
 	if f.offset > 0 {
 		return
 	}
 
-	// 初次使用需要判断下是否需要清除偏移量
-	if f.cleanOffset() {
-		return
-	}
+	// 从文件中读取偏移量
 	filename := f.offsetFilename()
 	offset, err := f.getContent(filename)
 	if err != nil {
