@@ -280,7 +280,8 @@ func (p *PsLog) CronLogs() {
 	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
-		if fileInfo.Handler.Tail { // 跳过实时监听的
+		// 需要跳过 offset>0 && tail=true, 防止待处理文件 tail=true, offset=0, 然后文件有内容, 但没有文件变化
+		if fileInfo.loadOffset() != 0 && fileInfo.Handler.Tail {
 			continue
 		}
 		p.parseLog(fileInfo)
