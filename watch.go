@@ -90,7 +90,7 @@ func (w *Watch) Close() {
 func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 	go func() {
 		defer func() {
-			w.watcher.Close()
+			w.Close()
 			close(busCh)
 			w.fileMap = nil
 			if err := recover(); err != nil {
