@@ -315,7 +315,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 
 	fileSize := st.Size()
 	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
-	if fileSize == 0 || fileInfo.offset > fileSize {
+	if fileSize == 0 || fileInfo.offset >= fileSize {
 		return
 	}
 
