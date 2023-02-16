@@ -156,8 +156,8 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		} else {
 			fileInfo = &FileInfo{Handler: handler}
 			fileInfo.Parse(path)
+			fileInfo.initOffset()
 		}
-		fileInfo.initOffset()
 		if p.tail && handler.Tail {
 			// 直接监听对应的目录
 			if err := p.watch.Add(fileInfo.FileName()); err != nil {
