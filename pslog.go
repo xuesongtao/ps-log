@@ -89,6 +89,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	go obj.sentry()
+	plg.Info("init ps-log is success")
 	return obj, nil
 }
 
@@ -267,7 +268,7 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
 			}
-			p.parseLog(fileInfo)
+			p.parseLog(false, fileInfo)
 		}
 		plg.Info("watchCh is closed")
 	}()
@@ -279,15 +280,18 @@ func (p *PsLog) CronLogs() {
 	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
-		if fileInfo.Handler.Tail { // 跳过实时监听的
+		// 需要跳过 offset>0 && tail=true 注:防止待处理文件 tail=true, offset=0, 然后文件有内容, 但没有文件变化
+		if fileInfo.loadOffset() != 0 && fileInfo.Handler.Tail {
 			continue
 		}
-		p.parseLog(fileInfo)
+
+		// 定时更新的不是很频繁, 所有每次都保存 offset
+		p.parseLog(true, fileInfo)
 	}
 }
 
 // parseLog 解析文件
-func (p *PsLog) parseLog(fileInfo *FileInfo) {
+func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	if p.HasClose() {
 		plg.Warning("ps-log is closed")
 		return
@@ -354,7 +358,7 @@ func (p *PsLog) parseLog(fileInfo *FileInfo) {
 	// 保存偏移量
 	fileInfo.storeOffset(fileSize)
 	p.taskPool.Submit(func() {
-		fileInfo.saveOffset(fileSize)
+		fileInfo.saveOffset(mustSaveOffset, fileSize)
 	})
 }
 
@@ -441,6 +445,7 @@ func (p *PsLog) sentry() {
 }
 
 func (p *PsLog) cleanUp(t time.Time) {
+	plg.Info("cleanUp is running")
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 

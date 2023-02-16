@@ -123,10 +123,10 @@ func (f *FileInfo) cleanOffset() (skip bool) {
 
 // saveOffset 保存偏移量
 // 通过隐藏文件来保存
-func (f *FileInfo) saveOffset(offset int64) {
+func (f *FileInfo) saveOffset(mustSaveOffset bool, offset int64) {
 	filename := f.offsetFilename()
 	// 判断下是否需要持久化
-	if f.Handler.Change == -1 {
+	if mustSaveOffset || f.Handler.Change == -1 {
 		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
 			plg.Error("f.putContent is failed, err:", err)
 		}
