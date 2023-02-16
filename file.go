@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,8 @@ type FileInfo struct {
 	Name         string   // 文件名
 	offsetChange int32    // 记录 offset 变化次数
 	offset       int64    // 当前文件偏移量
+	beginOffset  int64    // 记录最开始的偏移量
+	mu           sync.Mutex
 }
 
 // HandlerIsNil
@@ -87,6 +90,10 @@ func (f *FileInfo) loadOffset() int64 {
 	return atomic.LoadInt64(&f.offset)
 }
 
+func (f *FileInfo) loadBeginOffset() int64 {
+	return atomic.LoadInt64(&f.beginOffset)
+}
+
 // initOffset 初始化文件 offset
 func (f *FileInfo) initOffset() {
 	// 初次使用需要判断下是否需要清除偏移量
@@ -95,7 +102,7 @@ func (f *FileInfo) initOffset() {
 	}
 
 	// 需要判断下是否已处理过
-	if f.offset > 0 {
+	if f.beginOffset > 0 {
 		return
 	}
 
@@ -108,6 +115,7 @@ func (f *FileInfo) initOffset() {
 	}
 	offsetInt, _ := strconv.Atoi(offset)
 	f.offset = int64(offsetInt)
+	f.beginOffset = f.offset
 }
 
 func (f *FileInfo) cleanOffset() (skip bool) {
@@ -115,6 +123,7 @@ func (f *FileInfo) cleanOffset() (skip bool) {
 		return
 	}
 	f.offset = 0
+	f.beginOffset = f.offset
 	f.putContent(f.offsetFilename(), "0")
 	f.Handler.CleanOffset = false
 	skip = true

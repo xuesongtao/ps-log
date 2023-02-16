@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitee.com/xuesongtao/gotool/base"
@@ -52,9 +53,9 @@ func WithCleanUpTime(dur time.Duration) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail        bool // 是否已开启实时分析
-	async2Tos   bool // 是否异步处理 tos
-	closed      bool
+	tail        bool          // 是否已开启实时分析
+	async2Tos   bool          // 是否异步处理 tos
+	closed      int32         // 0-开 1-关
 	cleanUpTime time.Duration // 清理 logMap 的周期
 	rwMu        sync.RWMutex
 	taskPool    *tl.TaskPool        // 任务池
@@ -209,13 +210,11 @@ func (p *PsLog) prePath2Handler(existSkip bool, path2HandlerMap map[string]*Hand
 
 // Close 释放资源
 func (p *PsLog) Close() {
-	p.rwMu.Lock()
-	if !p.closed {
-		p.closed = true
-		p.rwMu.Unlock()
-	} else { // 已经关了的就退出, 防止重复关闭 chan panic
-		p.rwMu.Unlock()
+	if p.HasClose() {
+		// 已经关了的就退出, 防止重复关闭 chan panic
 		return
+	} else {
+		atomic.StoreInt32(&p.closed, 1)
 	}
 
 	if p.watch != nil {
@@ -280,8 +279,8 @@ func (p *PsLog) CronLogs() {
 	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
-		// 需要跳过 offset>0 && tail=true 注:防止待处理文件 tail=true, offset=0, 然后文件有内容, 但没有文件变化
-		if fileInfo.loadOffset() != 0 && fileInfo.Handler.Tail {
+		// 从开机到现在一直都没有变化的 tail=true 需要处理
+		if fileInfo.loadOffset() > fileInfo.loadBeginOffset() && fileInfo.Handler.Tail {
 			continue
 		}
 
@@ -296,6 +295,9 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 		plg.Warning("ps-log is closed")
 		return
 	}
+	// 防止 tail 和 cron 对同一个文件进行操作
+	fileInfo.mu.Lock()
+	defer fileInfo.mu.Unlock()
 
 	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
 	if err != nil {
@@ -313,7 +315,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 
 	fileSize := st.Size()
 	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
-	if fileSize == 0 || fileInfo.offset > fileSize {
+	if fileSize == 0 || fileInfo.offset >= fileSize {
 		return
 	}
 
@@ -393,9 +395,7 @@ func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, l
 
 // HasClose 是否已经关闭
 func (p *PsLog) HasClose() bool {
-	p.rwMu.RLock()
-	defer p.rwMu.RUnlock()
-	return p.closed
+	return atomic.LoadInt32(&p.closed) == 1
 }
 
 // writer 写入目标, 默认同步处理
@@ -490,17 +490,17 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 // List 返回待处理的内容
 // printTarget 是否打印 TARGETS, EXCLUDES(因为这两个可能会很多), 默认 true
 // 格式:
+// ------------------------------------------------------------------------------
+// |  PATH |      EXPIRE         |  TAIL | BEGIN  | OFFSET  | TARGETS | EXCLUDES |
 // ----------------------------------------------------------------------
-// |  PATH |      EXPIRE         |  TAIL | OFFSET  | TARGETS | EXCLUDES |
-// ----------------------------------------------------------------------
-// |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 100     |【 ERRO 】|          |
-// ----------------------------------------------------------------------
+// |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 0      | 100     |【 ERRO 】|          |
+// -------------------------------------------------------------------------------
 func (p *PsLog) List(printTarget ...bool) string {
 	defaultPrintTarget := true
 	if len(printTarget) > 0 {
 		defaultPrintTarget = printTarget[0]
 	}
-	header := []string{"PATH", "EXPIRE", "TAIL", "OFFSET"}
+	header := []string{"PATH", "EXPIRE", "TAIL", "BEGIN", "OFFSET"}
 	if defaultPrintTarget {
 		header = append(header, "TARGETS", "EXCLUDES")
 	}
@@ -518,6 +518,7 @@ func (p *PsLog) List(printTarget ...bool) string {
 			v.Handler.ExpireAt.Format(base.DatetimeFmt),
 			base.ToString(v.Handler.Tail),
 			base.ToString(v.loadOffset()),
+			base.ToString(v.loadBeginOffset()),
 		}
 		if defaultPrintTarget {
 			data = append(data, v.Handler.getTargetDump(), v.Handler.getExcludesDump())
