@@ -441,6 +441,7 @@ func (p *PsLog) sentry() {
 }
 
 func (p *PsLog) cleanUp(t time.Time) {
+	plg.Info("cleanUp is running")
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 
