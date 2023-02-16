@@ -89,6 +89,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	go obj.sentry()
+	plg.Info("init ps-log is success")
 	return obj, nil
 }
 
