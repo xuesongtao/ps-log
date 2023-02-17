@@ -279,7 +279,9 @@ func (p *PsLog) CronLogs() {
 	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
-		// 从开机到现在一直都没有变化的 tail=true 需要处理
+		// 开机后偏移量一直相等, 为防止文件一直没有变化, 需要定时处理, 说明:
+		// 	1. 如果在执行过程中未处理文件内容服务停了(漏处理), 重启后如果文件一直没有变化需要定时处理
+		// 	2. 如果在执行过程中已处理文件内容, 未保存偏移量服务停了(已处理), 重启后如果文件一直没有变化需要定时处理
 		if fileInfo.loadOffset() > fileInfo.loadBeginOffset() && fileInfo.Handler.Tail {
 			continue
 		}
@@ -513,10 +515,14 @@ func (p *PsLog) List(printTarget ...bool) string {
 	table.SetCenterSeparator("|")
 	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
+		tailStr := base.ToString(v.Handler.Tail)
+		if v.loadBeginOffset() == v.loadOffset() {
+			tailStr += "(need cron)"
+		}
 		data := []string{
 			k,
 			v.Handler.ExpireAt.Format(base.DatetimeFmt),
-			base.ToString(v.Handler.Tail),
+			tailStr,
 			base.ToString(v.loadBeginOffset()),
 			base.ToString(v.loadOffset()),
 		}
