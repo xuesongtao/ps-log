@@ -72,9 +72,10 @@ type PsLog struct {
 func NewPsLog(opts ...Opt) (*PsLog, error) {
 	fmt.Print(consoleLogo)
 	obj := &PsLog{
-		logMap:  make(map[string]*FileInfo),
-		handler: new(Handler),
-		closeCh: make(chan struct{}, 1),
+		firstCallList: true,
+		logMap:        make(map[string]*FileInfo),
+		handler:       new(Handler),
+		closeCh:       make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
@@ -499,9 +500,6 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 // |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 0      | 100     |【 ERRO 】|          |
 // -------------------------------------------------------------------------------
 func (p *PsLog) List(printTarget ...bool) string {
-	if !p.firstCallList {
-		p.firstCallList = true
-	}
 	defaultPrintTarget := true
 	if len(printTarget) > 0 {
 		defaultPrintTarget = printTarget[0]
@@ -537,5 +535,9 @@ func (p *PsLog) List(printTarget ...bool) string {
 		table.Append(data)
 	}
 	table.Render()
+	
+	if p.firstCallList {
+		p.firstCallList = false
+	}
 	return buffer.String()
 }
