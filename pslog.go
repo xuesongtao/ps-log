@@ -517,8 +517,8 @@ func (p *PsLog) List(printTarget ...bool) string {
 			k,
 			v.Handler.ExpireAt.Format(base.DatetimeFmt),
 			base.ToString(v.Handler.Tail),
-			base.ToString(v.loadOffset()),
 			base.ToString(v.loadBeginOffset()),
+			base.ToString(v.loadOffset()),
 		}
 		if defaultPrintTarget {
 			data = append(data, v.Handler.getTargetDump(), v.Handler.getExcludesDump())
