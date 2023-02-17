@@ -519,8 +519,8 @@ func (p *PsLog) List(printTarget ...bool) string {
 	for k, v := range p.cloneLogMap() {
 		tailStr := base.ToString(v.Handler.Tail)
 		// 第一次调用不需要打印此内容
-		if !p.firstCallList && v.loadBeginOffset() == v.loadOffset() {
-			tailStr += "(need cron)"
+		if !p.firstCallList && v.Handler.Tail && v.loadBeginOffset() == v.loadOffset() {
+			tailStr += "(may cron)" // 可能出现在定时监听里
 		}
 		data := []string{
 			k,
@@ -535,7 +535,7 @@ func (p *PsLog) List(printTarget ...bool) string {
 		table.Append(data)
 	}
 	table.Render()
-	
+
 	if p.firstCallList {
 		p.firstCallList = false
 	}
