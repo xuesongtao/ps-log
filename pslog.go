@@ -53,17 +53,18 @@ func WithCleanUpTime(dur time.Duration) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail        bool          // 是否已开启实时分析
-	async2Tos   bool          // 是否异步处理 tos
-	closed      int32         // 0-开 1-关
-	cleanUpTime time.Duration // 清理 logMap 的周期
-	rwMu        sync.RWMutex
-	taskPool    *tl.TaskPool        // 任务池
-	handler     *Handler            // 处理部分
-	watch       *Watch              // 文件监听
-	watchCh     chan *WatchFileInfo // 文件监听文件内容
-	closeCh     chan struct{}
-	logMap      map[string]*FileInfo // key: 文件路径
+	tail          bool          // 是否已开启实时分析
+	async2Tos     bool          // 是否异步处理 tos
+	firstCallList bool          // 标记是否第一调用 List
+	closed        int32         // 0-开 1-关
+	cleanUpTime   time.Duration // 清理 logMap 的周期
+	rwMu          sync.RWMutex
+	taskPool      *tl.TaskPool        // 任务池
+	handler       *Handler            // 处理部分
+	watch         *Watch              // 文件监听
+	watchCh       chan *WatchFileInfo // 文件监听文件内容
+	closeCh       chan struct{}
+	logMap        map[string]*FileInfo // key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -71,9 +72,10 @@ type PsLog struct {
 func NewPsLog(opts ...Opt) (*PsLog, error) {
 	fmt.Print(consoleLogo)
 	obj := &PsLog{
-		logMap:  make(map[string]*FileInfo),
-		handler: new(Handler),
-		closeCh: make(chan struct{}, 1),
+		firstCallList: true,
+		logMap:        make(map[string]*FileInfo),
+		handler:       new(Handler),
+		closeCh:       make(chan struct{}, 1),
 	}
 
 	for _, opt := range opts {
@@ -156,8 +158,8 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		} else {
 			fileInfo = &FileInfo{Handler: handler}
 			fileInfo.Parse(path)
-			fileInfo.initOffset()
 		}
+		fileInfo.initOffset()
 		if p.tail && handler.Tail {
 			// 直接监听对应的目录
 			if err := p.watch.Add(fileInfo.FileName()); err != nil {
@@ -279,7 +281,9 @@ func (p *PsLog) CronLogs() {
 	tmpLogMap := p.cloneLogMap()
 
 	for _, fileInfo := range tmpLogMap {
-		// 从开机到现在一直都没有变化的 tail=true 需要处理
+		// 开机后偏移量一直相等, 为防止文件一直没有变化, 需要定时处理, 说明:
+		// 	1. 如果在执行过程中未处理文件内容服务停了(漏处理), 重启后如果文件一直没有变化需要定时处理
+		// 	2. 如果在执行过程中已处理文件内容, 未保存偏移量服务停了(已处理), 重启后如果文件一直没有变化需要定时处理
 		if fileInfo.loadOffset() > fileInfo.loadBeginOffset() && fileInfo.Handler.Tail {
 			continue
 		}
@@ -513,12 +517,17 @@ func (p *PsLog) List(printTarget ...bool) string {
 	table.SetCenterSeparator("|")
 	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
+		tailStr := base.ToString(v.Handler.Tail)
+		// 第一次调用不需要打印此内容
+		if !p.firstCallList && v.Handler.Tail && v.loadBeginOffset() == v.loadOffset() {
+			tailStr += "(may cron)" // 可能出现在定时监听里
+		}
 		data := []string{
 			k,
 			v.Handler.ExpireAt.Format(base.DatetimeFmt),
-			base.ToString(v.Handler.Tail),
-			base.ToString(v.loadOffset()),
+			tailStr,
 			base.ToString(v.loadBeginOffset()),
+			base.ToString(v.loadOffset()),
 		}
 		if defaultPrintTarget {
 			data = append(data, v.Handler.getTargetDump(), v.Handler.getExcludesDump())
@@ -526,5 +535,9 @@ func (p *PsLog) List(printTarget ...bool) string {
 		table.Append(data)
 	}
 	table.Render()
+
+	if p.firstCallList {
+		p.firstCallList = false
+	}
 	return buffer.String()
 }

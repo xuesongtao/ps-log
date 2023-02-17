@@ -102,7 +102,7 @@ func (f *FileInfo) initOffset() {
 	}
 
 	// 需要判断下是否已处理过
-	if f.beginOffset > 0 {
+	if f.offset > 0 {
 		return
 	}
 
