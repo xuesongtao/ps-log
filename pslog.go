@@ -53,17 +53,18 @@ func WithCleanUpTime(dur time.Duration) Opt {
 
 // PsLog 解析 log
 type PsLog struct {
-	tail        bool          // 是否已开启实时分析
-	async2Tos   bool          // 是否异步处理 tos
-	closed      int32         // 0-开 1-关
-	cleanUpTime time.Duration // 清理 logMap 的周期
-	rwMu        sync.RWMutex
-	taskPool    *tl.TaskPool        // 任务池
-	handler     *Handler            // 处理部分
-	watch       *Watch              // 文件监听
-	watchCh     chan *WatchFileInfo // 文件监听文件内容
-	closeCh     chan struct{}
-	logMap      map[string]*FileInfo // key: 文件路径
+	tail          bool          // 是否已开启实时分析
+	async2Tos     bool          // 是否异步处理 tos
+	firstCallList bool          // 标记是否第一调用 List
+	closed        int32         // 0-开 1-关
+	cleanUpTime   time.Duration // 清理 logMap 的周期
+	rwMu          sync.RWMutex
+	taskPool      *tl.TaskPool        // 任务池
+	handler       *Handler            // 处理部分
+	watch         *Watch              // 文件监听
+	watchCh       chan *WatchFileInfo // 文件监听文件内容
+	closeCh       chan struct{}
+	logMap        map[string]*FileInfo // key: 文件路径
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -498,6 +499,9 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 // |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 0      | 100     |【 ERRO 】|          |
 // -------------------------------------------------------------------------------
 func (p *PsLog) List(printTarget ...bool) string {
+	if !p.firstCallList {
+		p.firstCallList = true
+	}
 	defaultPrintTarget := true
 	if len(printTarget) > 0 {
 		defaultPrintTarget = printTarget[0]
@@ -516,7 +520,8 @@ func (p *PsLog) List(printTarget ...bool) string {
 	// table.SetAutoMergeCells(true)
 	for k, v := range p.cloneLogMap() {
 		tailStr := base.ToString(v.Handler.Tail)
-		if v.loadBeginOffset() == v.loadOffset() {
+		// 第一次调用不需要打印此内容
+		if !p.firstCallList && v.loadBeginOffset() == v.loadOffset() {
 			tailStr += "(need cron)"
 		}
 		data := []string{
