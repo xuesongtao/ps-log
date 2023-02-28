@@ -201,7 +201,7 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 
 		delFilename := filepath.Join(f.offsetDir(), offsetFile.Name())
 		if err := os.Remove(delFilename); err != nil {
-			plg.Errorf("os.Remove %q is failed, err: %v", delFilename, err)
+			plg.Warningf("os.Remove %q is failed, err: %v", delFilename, err)
 		}
 	}
 }

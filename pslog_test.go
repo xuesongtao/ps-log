@@ -11,7 +11,6 @@ import (
 	"gitee.com/xuesongtao/gotool/base"
 	"gitee.com/xuesongtao/gotool/xfile"
 	plg "gitee.com/xuesongtao/ps-log/log"
-	"github.com/olekukonko/tablewriter"
 )
 
 var (
@@ -32,59 +31,6 @@ type BytesBuf struct {
 
 func (b *BytesBuf) WriteTo(bus *LogHandlerBus) {
 	b.Buf.WriteString(bus.Msg)
-}
-
-func TestDumpTable(t *testing.T) {
-	t.Skip("dump table")
-	var multiline = `A multiline
-string with some lines being really long.`
-
-	const (
-		testRow = iota
-		testHeader
-		testFooter
-		testFooter2
-	)
-	for mode := testRow; mode <= testFooter2; mode++ {
-		for _, autoFmt := range []bool{false, true} {
-			if mode == testRow && autoFmt {
-				// Nothing special to test, skip
-				continue
-			}
-			for _, autoWrap := range []bool{false, true} {
-				for _, reflow := range []bool{false, true} {
-					if !autoWrap && reflow {
-						// Invalid configuration, skip
-						continue
-					}
-					fmt.Println("mode", mode, "autoFmt", autoFmt, "autoWrap", autoWrap, "reflow", reflow)
-					tw := tablewriter.NewWriter(os.Stdout)
-					tw.SetAutoFormatHeaders(autoFmt)
-					tw.SetAutoWrapText(autoWrap)
-					tw.SetReflowDuringAutoWrap(reflow)
-					if mode == testHeader {
-						tw.SetHeader([]string{"woo", multiline})
-					} else {
-						tw.SetHeader([]string{"woo", "waa"})
-					}
-					if mode == testRow {
-						tw.Append([]string{"woo", multiline})
-					} else {
-						tw.Append([]string{"woo", "waa"})
-					}
-					if mode == testFooter {
-						tw.SetFooter([]string{"woo", multiline})
-					} else if mode == testFooter2 {
-						tw.SetFooter([]string{"", multiline})
-					} else {
-						tw.SetFooter([]string{"woo", "waa"})
-					}
-					tw.Render()
-				}
-			}
-		}
-		fmt.Println()
-	}
 }
 
 func TestList(t *testing.T) {
