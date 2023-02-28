@@ -494,17 +494,17 @@ func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
 // List 返回待处理的内容
 // printTarget 是否打印 TARGETS, EXCLUDES(因为这两个可能会很多), 默认 true
 // 格式:
-// ------------------------------------------------------------------------------
-// |  PATH |      EXPIRE         |  TAIL | BEGIN  | OFFSET  | TARGETS | EXCLUDES |
-// ----------------------------------------------------------------------
-// |  xxxx | XXXX-XX-XX XX:XX:XX |  true | 0      | 100     |【 ERRO 】|          |
-// -------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------
+// |  PATH | OPEN |      EXPIRE         |  TAIL | BEGIN  | OFFSET  | TARGETS | EXCLUDES |
+// --------------------------------------------------------------------------------------
+// |  xxxx |   2   | XXXX-XX-XX XX:XX:XX |  true | 0      | 100     |【 ERRO 】|         |
+// ---------------------------------------------------------------------------------------
 func (p *PsLog) List(printTarget ...bool) string {
 	defaultPrintTarget := true
 	if len(printTarget) > 0 {
 		defaultPrintTarget = printTarget[0]
 	}
-	header := []string{"PATH", "EXPIRE", "TAIL", "BEGIN", "OFFSET"}
+	header := []string{"PATH", "OPEN", "EXPIRE", "TAIL", "BEGIN", "OFFSET"}
 	if defaultPrintTarget {
 		header = append(header, "TARGETS", "EXCLUDES")
 	}
@@ -524,6 +524,7 @@ func (p *PsLog) List(printTarget ...bool) string {
 		}
 		data := []string{
 			k,
+			fmt.Sprint(filePool.GetFile2Open(v.FileName(), os.O_RDONLY)), // 记录当前文件打开的文件句柄
 			v.Handler.ExpireAt.Format(base.DatetimeFmt),
 			tailStr,
 			base.ToString(v.loadBeginOffset()),

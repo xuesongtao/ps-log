@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// dump
-	log.Println(ps.List())
 	for range closeCh {
 	}
+	log.Println(ps.List())
 }
