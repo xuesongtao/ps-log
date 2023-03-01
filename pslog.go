@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -471,6 +472,7 @@ func (p *PsLog) cleanUp(t time.Time) {
 		delete(p.logMap, path)
 	}
 	p.watch.Remove(deleteKeys...)
+	plg.Info("cleanUp path: ", strings.Join(deleteKeys, ",\n"))
 }
 
 func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
