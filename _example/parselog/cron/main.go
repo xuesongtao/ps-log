@@ -12,15 +12,17 @@ import (
 )
 
 func main() {
-	ps, _ := pslog.NewPsLog()
+	ps, _ := pslog.NewPsLog(pslog.WithCleanUpTime(time.Second))
 	defer ps.Close()
 
 	tmp := "log/test.log"
+
 	handler := &pslog.Handler{
 		CleanOffset: true,
 		Change:      -1, // 每次都持久化 offset
 		// Tail:     true,     // 实时监听
-		ExpireAt: pslog.NoExpire, // 文件句柄不过期
+		// ExpireAt: pslog.NoExpire, // 文件句柄不过期
+		ExpireAt: time.Now().Add(5 * time.Second), // 文件句柄不过期
 		Targets: []*pslog.Target{
 			{
 				Content:  " ",
@@ -51,7 +53,7 @@ func main() {
 		}
 
 		// 防止很快就结束
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Minute)
 		close(closeCh)
 	}()
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -174,14 +175,15 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 
 // prePath2Handler 预处理
 func (p *PsLog) prePath2Handler(existSkip bool, path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
-	logPathTmp := p.cloneLogMap()
-
 	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
-		if _, ok := logPathTmp[path]; ok && existSkip {
+		p.rwMu.RLock()
+		if _, ok := p.logMap[path]; ok && existSkip {
+			p.rwMu.RUnlock()
 			continue
 		}
+		p.rwMu.RUnlock()
 
 		path = filepath.Clean(path)
 		// 处理 handler
@@ -278,9 +280,9 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 
 // cronLog 定时解析 log
 func (p *PsLog) CronLogs() {
-	tmpLogMap := p.cloneLogMap()
-
-	for _, fileInfo := range tmpLogMap {
+	p.rwMu.RLock()
+	defer p.rwMu.RUnlock()
+	for _, fileInfo := range p.logMap {
 		// 开机后偏移量一直相等, 为防止文件一直没有变化, 需要定时处理, 说明:
 		// 	1. 如果在执行过程中未处理文件内容服务停了(漏处理), 重启后如果文件一直没有变化需要定时处理
 		// 	2. 如果在执行过程中已处理文件内容, 未保存偏移量服务停了(已处理), 重启后如果文件一直没有变化需要定时处理
@@ -470,25 +472,11 @@ func (p *PsLog) cleanUp(t time.Time) {
 	for _, path := range deleteKeys {
 		delete(p.logMap, path)
 	}
-	p.watch.Remove(deleteKeys...)
-}
 
-func (p *PsLog) cloneLogMap(depth ...bool) map[string]*FileInfo {
-	defaultDepth := false
-	if len(depth) > 0 {
-		defaultDepth = depth[0]
+	if p.watch != nil { // 如果只是 cron 的话, 此处为 nil
+		p.watch.Remove(deleteKeys...)
 	}
-	p.rwMu.RLock()
-	defer p.rwMu.RUnlock()
-	if defaultDepth {
-		tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
-		for k, v := range p.logMap {
-			tmpLogMap[k] = v
-		}
-		return tmpLogMap
-	}
-	tmp := p.logMap
-	return tmp
+	plg.Info("cleanUp path: ", strings.Join(deleteKeys, ",\n"))
 }
 
 // List 返回待处理的内容
@@ -516,7 +504,9 @@ func (p *PsLog) List(printTarget ...bool) string {
 	table.SetRowLine(true)
 	table.SetCenterSeparator("|")
 	// table.SetAutoMergeCells(true)
-	for k, v := range p.cloneLogMap() {
+	p.rwMu.RLock()
+	defer p.rwMu.RUnlock()
+	for k, v := range p.logMap {
 		tailStr := base.ToString(v.Handler.Tail)
 		// 第一次调用不需要打印此内容
 		if !p.firstCallList && v.Handler.Tail && v.loadBeginOffset() == v.loadOffset() {
