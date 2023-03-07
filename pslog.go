@@ -179,11 +179,11 @@ func (p *PsLog) prePath2Handler(existSkip bool, path2HandlerMap map[string]*Hand
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
 		p.rwMu.RLock()
-		if _, ok := p.logMap[path]; ok && existSkip {
-			p.rwMu.RUnlock()
+		_, ok := p.logMap[path]
+		p.rwMu.RUnlock()
+		if ok && existSkip {
 			continue
 		}
-		p.rwMu.RUnlock()
 
 		path = filepath.Clean(path)
 		// 处理 handler
