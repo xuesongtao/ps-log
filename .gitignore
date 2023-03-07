@@ -19,4 +19,4 @@ common.go
 .DS_Store
 .pslog_offset
 version.txt
-.log
+*.log
