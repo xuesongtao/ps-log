@@ -279,14 +279,28 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 }
 
 // cronLog 定时解析 log
-func (p *PsLog) CronLogs() {
+// makeUpTail 标记是否补偿 tail 模式, 防止文件开启后没有变化
+func (p *PsLog) CronLogs(makeUpTail ...bool) {
+	defaultMakeUpTail := true
+	if len(makeUpTail) > 0 {
+		defaultMakeUpTail = makeUpTail[0]
+	}
+	// 减少锁的持续时间, 初始化一个临时的 map
 	p.rwMu.RLock()
-	defer p.rwMu.RUnlock()
-	for _, fileInfo := range p.logMap {
-		// 开机后偏移量一直相等, 为防止文件一直没有变化, 需要定时处理, 说明:
+	tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
+	for path, fileInfo := range p.logMap {
+		tmpLogMap[path] = fileInfo
+	}
+	p.rwMu.RUnlock()
+
+	for _, fileInfo := range tmpLogMap {
+		// 开机后偏移量一直相等, 为防止文件一直没有变化(但文件里有待处理的内容), 需要定时处理, 说明:
 		// 	1. 如果在执行过程中未处理文件内容服务停了(漏处理), 重启后如果文件一直没有变化需要定时处理
 		// 	2. 如果在执行过程中已处理文件内容, 未保存偏移量服务停了(已处理), 重启后如果文件一直没有变化需要定时处理
-		if fileInfo.loadOffset() > fileInfo.loadBeginOffset() && fileInfo.Handler.Tail {
+		if fileInfo.loadOffset() > fileInfo.loadBeginOffset() && fileInfo.Handler.Tail { // 已经实时处理过了
+			continue
+		}
+		if fileInfo.loadOffset() == fileInfo.loadBeginOffset() && !defaultMakeUpTail { // 不需要补偿
 			continue
 		}
 
@@ -412,8 +426,9 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 		}
 		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
+				tmpTo, tmpBus := to, bus
 				p.taskPool.Submit(func() {
-					to.WriteTo(bus)
+					tmpTo.WriteTo(tmpBus)
 				})
 				continue
 			}
@@ -452,21 +467,24 @@ func (p *PsLog) sentry() {
 
 func (p *PsLog) cleanUp(t time.Time) {
 	plg.Info("cleanUp is running")
-	p.rwMu.Lock()
-	defer p.rwMu.Unlock()
 
 	// 处理过期的 path
+	p.rwMu.RLock()
 	deleteKeys := make([]string, 0, len(p.logMap))
 	for path, fileInfo := range p.logMap {
 		if fileInfo.IsExpire(t) {
 			deleteKeys = append(deleteKeys, path)
 		}
 	}
+	p.rwMu.RUnlock()
 
+	defer plg.Info("cleanUp path: ", strings.Join(deleteKeys, ",\n"))
 	if len(deleteKeys) == 0 {
 		return
 	}
 
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
 	// 1. 移除监听的 path,
 	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理
 	for _, path := range deleteKeys {
@@ -476,7 +494,6 @@ func (p *PsLog) cleanUp(t time.Time) {
 	if p.watch != nil { // 如果只是 cron 的话, 此处为 nil
 		p.watch.Remove(deleteKeys...)
 	}
-	plg.Info("cleanUp path: ", strings.Join(deleteKeys, ",\n"))
 }
 
 // List 返回待处理的内容
