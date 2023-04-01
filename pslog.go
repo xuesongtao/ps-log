@@ -355,21 +355,20 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 		if readSize > fileSize {
 			break
 		}
+
+		rowBytes := rows.Bytes()
+		readSize += int64(len(rowBytes))
 		// 处理行内容, 解决日志中可能出现的换行, 如: err stack
-		if !handler.MergeRule.Append(rows.Bytes()) {
+		if !handler.MergeRule.Append(rowBytes) {
 			continue
 		}
-
-		line := handler.MergeRule.Line()
-		p.handleLine(fileInfo, dataMap, line)
-		readSize += int64(len(line))
+		p.handleLine(fileInfo, dataMap, handler.MergeRule.Line())
 	}
 
 	// 说明还有内容没有读取完
-	if readSize < fileSize {
-		// residue := len(handler.MergeLine.Residue())
+	if !handler.MergeRule.Null() {
 		// plg.Infof("fileSize: %d, readSize: %d, residue: %d, total: %d", fileSize, readSize, residue, readSize+int64(residue))
-		p.handleLine(fileInfo, dataMap, handler.MergeRule.Residue())
+		p.handleLine(fileInfo, dataMap, handler.MergeRule.Line())
 	}
 
 	// plg.Info("dataMap:", base.ToString(dataMap))
