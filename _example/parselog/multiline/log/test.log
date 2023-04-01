@@ -1,29 +1,29 @@
-2023-02-10 17:40:11.647 goroutine 23 [running]:
+2023-04-01 16:51:22.345 goroutine 9 [running]:
 runtime/debug.Stack()
 	/usr/local/go/src/runtime/debug/stack.go:24 +0x88
-main.main.func1({0x100e54995, 0xc}, 0x14000102420)
+main.main.func1({0x102de551a, 0xc}, 0x140000204e0)
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:79 +0x27c
 created by main.main
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:57 +0x338
-2023-02-10 17:40:12.648 1
-2023-02-10 17:40:13.649 2
-2023-02-10 17:40:14.649 3
-2023-02-10 17:40:15.649 4
-2023-02-10 17:40:16.650 goroutine 23 [running]:
+2023-04-01 16:51:23.346 1
+2023-04-01 16:51:24.346 2
+2023-04-01 16:51:25.347 3
+2023-04-01 16:51:26.347 4
+2023-04-01 16:51:27.347 goroutine 9 [running]:
 runtime/debug.Stack()
 	/usr/local/go/src/runtime/debug/stack.go:24 +0x88
-main.main.func1({0x100e54995, 0xc}, 0x14000102420)
+main.main.func1({0x102de551a, 0xc}, 0x140000204e0)
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:79 +0x27c
 created by main.main
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:57 +0x338
-2023-02-10 17:40:17.650 6
-2023-02-10 17:40:18.650 7
-2023-02-10 17:40:19.651 8
-2023-02-10 17:40:20.651 9
-2023-02-10 17:40:21.652 goroutine 23 [running]:
+2023-04-01 16:51:28.348 6
+2023-04-01 16:51:29.348 7
+2023-04-01 16:51:30.349 8
+2023-04-01 16:51:31.349 9
+2023-04-01 16:51:32.350 goroutine 9 [running]:
 runtime/debug.Stack()
 	/usr/local/go/src/runtime/debug/stack.go:24 +0x88
-main.main.func1({0x100e54995, 0xc}, 0x14000102420)
+main.main.func1({0x102de551a, 0xc}, 0x140000204e0)
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:79 +0x27c
 created by main.main
 	/Users/xuesongtao/goProject/src/myGo/ps-log/_example/parselog/multiline/main.go:57 +0x338
