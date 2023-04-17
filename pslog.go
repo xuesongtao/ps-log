@@ -41,7 +41,7 @@ func WithTaskPoolSize(size int, workMaxLifetimeSec ...int64) Opt {
 		if len(workMaxLifetimeSec) > 0 {
 			defaultLife = workMaxLifetimeSec[0]
 		}
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(defaultLife))
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.Plg), tl.WithWorkerMaxLifeCycle(defaultLife))
 	}
 }
 
@@ -89,7 +89,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.Plg), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
 	}
 
 	go obj.sentry()
