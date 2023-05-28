@@ -26,7 +26,7 @@ type Target struct {
 	Content  string // 目标内容
 	excludes Matcher
 	Excludes []string      // 排除 msg
-	To       []PsLogWriter // 处理
+	To       []PsLogWriter // 一个目标内容, 多种处理方式
 }
 
 // Handler 处理的部分
@@ -56,6 +56,10 @@ func (h *Handler) Valid() error {
 		return errors.New("ExpireAt, ExpireDur can not both null")
 	}
 
+	if len(h.Targets) == 0 {
+		return errors.New("Targets is required")
+	}
+
 	for i, target := range h.Targets {
 		if target.Content == "" {
 			return fmt.Errorf("Targets.Content[%d] is null", i)
@@ -63,10 +67,6 @@ func (h *Handler) Valid() error {
 		if target.To == nil {
 			return fmt.Errorf("%q[%d] To is null", target.Content, i)
 		}
-	}
-
-	if len(h.Targets) == 0 {
-		return errors.New("Targets is required")
 	}
 	return nil
 }

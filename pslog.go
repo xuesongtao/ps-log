@@ -41,7 +41,7 @@ func WithTaskPoolSize(size int, workMaxLifetimeSec ...int64) Opt {
 		if len(workMaxLifetimeSec) > 0 {
 			defaultLife = workMaxLifetimeSec[0]
 		}
-		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(defaultLife))
+		pl.taskPool = tl.NewTaskPool("parse log", size, tl.WithPoolLogger(plg.Plg), tl.WithWorkerMaxLifeCycle(defaultLife))
 	}
 }
 
@@ -89,7 +89,7 @@ func NewPsLog(opts ...Opt) (*PsLog, error) {
 	}
 
 	if obj.taskPool == nil {
-		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.DefaultLogger()), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
+		obj.taskPool = tl.NewTaskPool("parse log", runtime.NumCPU(), tl.WithPoolLogger(plg.Plg), tl.WithWorkerMaxLifeCycle(taskPoolWorkMaxLifetime))
 	}
 
 	go obj.sentry()
@@ -348,7 +348,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	// 逐行读取
 	rows := bufio.NewScanner(f)
 	readSize := fileInfo.offset                   // 已读数
-	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no
+	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no, 支持一个匹配规则多个处理方式
 	handler := fileInfo.Handler
 	for rows.Scan() {
 		// 因为当前读为快照读, 所以需要保证本次读取内容小于 fileSize (快照时文件的大小)
