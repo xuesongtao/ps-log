@@ -31,6 +31,7 @@ type Target struct {
 
 // Handler 处理的部分
 type Handler struct {
+	LoopParse   bool          // 循环解析, 用于监听单文件日志, 说明: 这个采集的有可能不准确(在这种是基于文件大小和内存记录的偏移量做比较, 模式建议用 tail, cron 的话如果间隔时间太长就可能漏)
 	CleanOffset bool          // 是否需要清理保存的 offset, 只限于开机后一次
 	Tail        bool          // 是否实时处理, 说明: true 为实时; false 需要外部定时调用
 	Change      int32         // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
