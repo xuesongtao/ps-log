@@ -335,10 +335,15 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 
 	fileSize := st.Size()
 	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
-	if fileSize == 0 || fileInfo.offset >= fileSize {
+	if fileSize == 0 || fileInfo.offset == fileSize {
+		plg.Infof("offset: %d, fileSize: %d it will skip", fileInfo.offset, fileSize)
 		return
 	}
-
+	handler := fileInfo.Handler
+	// 这里单个文件, 循环采集
+	if fileInfo.offset > fileSize && handler.LoopParse {
+		fileInfo.offset = 0
+	}
 	_, err = f.Seek(fileInfo.offset, io.SeekStart)
 	if err != nil {
 		plg.Error("f.Seek is failed, err:", err)
@@ -349,7 +354,6 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	rows := bufio.NewScanner(f)
 	readSize := fileInfo.offset                   // 已读数
 	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no, 支持一个匹配规则多个处理方式
-	handler := fileInfo.Handler
 	for rows.Scan() {
 		// 因为当前读为快照读, 所以需要保证本次读取内容小于 fileSize (快照时文件的大小)
 		if readSize > fileSize {

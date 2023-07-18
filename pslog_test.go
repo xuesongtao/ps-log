@@ -136,6 +136,81 @@ func TestTail(t *testing.T) {
 	}
 }
 
+func TestTailLoop(t *testing.T) {
+	ps, _ := NewPsLog()
+	defer ps.Close()
+	if err := ps.TailLogs(); err != nil {
+		t.Fatal(err)
+	}
+	strBuf := new(StrBuf)
+	byteBuf := new(BytesBuf)
+	stdout := new(Stdout)
+	tmp := tmpDir + "/test2tailloop.log"
+	handler := &Handler{
+		LoopParse:   true,
+		CleanOffset: true,
+		Change:      -1,       // 每次都持久化 offset
+		Tail:        true,     // 实时监听
+		ExpireAt:    NoExpire, // 文件句柄不过期
+		Targets: []*Target{
+			{
+				Content:  " ",
+				Excludes: []string{},
+				To:       []PsLogWriter{strBuf, byteBuf, stdout},
+			},
+		},
+	}
+	if err := ps.Register(handler); err != nil {
+		t.Fatal(err)
+	}
+	if err := ps.AddPaths(tmp); err != nil {
+		t.Fatal("err:", err)
+	}
+
+	closeCh := make(chan struct{})
+	go func() {
+		fh := xfile.NewFileHandle(tmp)
+		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
+			plg.Error(err)
+			return
+		}
+		defer fh.Close()
+
+		for i := 1; i < 5; i++ {
+			for j := 0; j < 10/i; j++ {
+				// time.Sleep(time.Microsecond)
+				_, err := fh.GetFile().WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprintf("%d-%d", i, j) + "\n")
+				if err != nil {
+					plg.Error("write err:", err)
+				}
+			}
+			time.Sleep(time.Second * 5)
+			_, err := fh.PutContent("")
+			if err != nil {
+				plg.Error("err:", err)
+			}
+			t.Log("reset")
+		}
+		time.Sleep(time.Second * 5)
+
+		close(closeCh)
+	}()
+
+	for range closeCh {
+	}
+
+	data, err := xfile.GetContent(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
+		t.Error("data:", data)
+		t.Error("byteBuf:", byteBuf.Buf.String())
+		t.Error("strBuf:", strBuf.Buf.String())
+	}
+}
+
 func TestCron(t *testing.T) {
 	ps, _ := NewPsLog()
 	defer ps.Close()
