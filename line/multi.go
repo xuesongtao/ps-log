@@ -30,7 +30,7 @@ func (m *Multi) StartPattern(expr string) error {
 
 func (m *Multi) Null() bool {
 	defer m.buf.Reset()
-	m.line = m.buf.Bytes()
+	m.line = m.copy(m.buf.Bytes())
 	return len(m.line) == 0
 }
 
@@ -45,11 +45,17 @@ func (m *Multi) Append(data []byte) bool {
 	// 1. 第一次匹配时先清理 buf(buf 为空), 然后追加
 	// 2. 第二次匹配就应该上一行的内容
 	if m.re.Match(data) {
-		m.line = m.buf.Bytes()
+		m.line = m.copy(m.buf.Bytes())
 		m.buf.Reset()
 	}
 	if _, err := m.buf.Write(data); err != nil {
 		plg.Error("m.buf.Write is failed, err:", err)
 	}
 	return len(m.line) > 0
+}
+
+func (m *Multi) copy(src []byte) []byte {
+	tmp := make([]byte, len(src))
+	copy(tmp, src)
+	return tmp
 }
