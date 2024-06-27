@@ -334,7 +334,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	}
 
 	fileSize := st.Size()
-	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
 	if fileSize == 0 || fileInfo.offset == fileSize {
 		plg.Infof("offset: %d, fileSize: %d it will skip", fileInfo.offset, fileSize)
 		return
@@ -427,6 +427,7 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 		if bus.skip() {
 			continue
 		}
+		plg.Infof("writeTo msg:", bus.Msg)
 		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				tmpTo, tmpBus := to, bus

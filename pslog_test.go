@@ -88,7 +88,7 @@ func TestTail(t *testing.T) {
 		ExpireAt:    NoExpire, // 文件句柄不过期
 		Targets: []*Target{
 			{
-				Content:  " ",
+				Content:  "warning",
 				Excludes: []string{},
 				To:       []PsLogWriter{strBuf, byteBuf, stdout},
 			},
@@ -109,7 +109,7 @@ func TestTail(t *testing.T) {
 		f := fh.GetFile()
 		for i := 0; i < 10; i++ {
 			// time.Sleep(time.Microsecond)
-			_, err := f.WriteString(time.Now().Format(base.DatetimeFmt+".000") + " " + fmt.Sprint(i) + "\n")
+			_, err := f.WriteString(`{"level":"warning","msg":"q","time":"2024-02-02 17:57:10.399"}`)
 			if err != nil {
 				plg.Error("write err:", err)
 			}
