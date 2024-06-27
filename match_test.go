@@ -48,7 +48,8 @@ func TestTireMem(t *testing.T) {
 }
 
 func TestTrie(t *testing.T) {
-	row := `[2023-01-04T21:21:56+08:00] 测试 [ERRO] 110.184.137.102 200 "POST /hiddendanger/getprincipalconfiglist HTTP/1.1" 198 "http://localhost:8080/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36" "-"`
+	row := `{"level":"warning","msg":"q","time":"2024-02-02 17:57:10.399"}`
+	contain := []byte("warning")
 	// row := `[ERRO] 110.184`
 	tree := newTire()
 	if !tree.Null() {
@@ -62,7 +63,7 @@ func TestTrie(t *testing.T) {
 	}
 
 	bb := []byte(row)
-	ok := contains(bb)
+	ok := contains(contain)
 	if tree.Search(bb) != ok {
 		t.Errorf("handle is failed, it should is [%v]", ok)
 	}

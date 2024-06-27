@@ -334,7 +334,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	}
 
 	fileSize := st.Size()
-	// plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
 	if fileSize == 0 || fileInfo.offset == fileSize {
 		plg.Infof("offset: %d, fileSize: %d it will skip", fileInfo.offset, fileSize)
 		return
@@ -375,7 +375,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 		p.handleLine(fileInfo, dataMap, handler.MergeRule.Line())
 	}
 
-	// plg.Info("dataMap:", base.ToString(dataMap))
+	plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
 	}
