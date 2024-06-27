@@ -375,7 +375,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 		p.handleLine(fileInfo, dataMap, handler.MergeRule.Line())
 	}
 
-	plg.Info("dataMap:", base.ToString(dataMap))
+	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
 	}
@@ -427,6 +427,7 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 		if bus.skip() {
 			continue
 		}
+		plg.Infof("writeTo msg:", bus.Msg)
 		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				tmpTo, tmpBus := to, bus
