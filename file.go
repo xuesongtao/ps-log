@@ -2,7 +2,6 @@ package pslog
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -106,6 +105,9 @@ func (f *FileInfo) initOffset() {
 		return
 	}
 
+	// 清理已过期文件偏移量文件
+	f.removeOffsetFile()
+
 	// 从文件中读取偏移量
 	filename := f.offsetFilename()
 	offset, err := f.getContent(filename)
@@ -139,7 +141,6 @@ func (f *FileInfo) saveOffset(mustSaveOffset bool, offset int64) {
 		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
 			plg.Error("f.putContent is failed, err:", err)
 		}
-		f.removeOffsetFile()
 		return
 	}
 
@@ -178,24 +179,31 @@ func (f *FileInfo) putContent(path string, content string) (int, error) {
 	return fh.PutContent(content)
 }
 
+// remove 移出
+func (f *FileInfo) remove(path string) {
+	filePool.Remove(path)
+}
+
 // removeOffsetFile 移除保存文件偏移量的文件
 func (f *FileInfo) removeOffsetFile(filename ...string) {
 	if len(filename) > 0 && filename[0] != "" {
 		if err := os.Remove(filename[0]); err != nil {
 			plg.Errorf("os.Remove %q is failed, err: %v", filename[0], err)
 		}
+		f.remove(filename[0])
 		return
 	}
 
 	// 移除当前目录下cleanOffsetFileDayDur天前的文件
-	offsetFiles, err := ioutil.ReadDir(f.offsetDir())
+	offsetFiles, err := os.ReadDir(f.offsetDir())
 	if err != nil {
 		plg.Errorf("ioutil.ReadDir %q is failed, err: %v", f.offsetDir(), err)
 		return
 	}
 	curTime := time.Now()
 	for _, offsetFile := range offsetFiles {
-		if curTime.Sub(offsetFile.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
+		info, _ := offsetFile.Info()
+		if curTime.Sub(info.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
 			continue
 		}
 
@@ -203,5 +211,6 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 		if err := os.Remove(delFilename); err != nil {
 			plg.Warningf("os.Remove %q is failed, err: %v", delFilename, err)
 		}
+		f.remove(delFilename)
 	}
 }

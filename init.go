@@ -23,7 +23,7 @@ ______    ______         |  |    ____     ____
 )
 
 var (
-	filePool = xfile.NewFilePool(100)                       // 文件池
+	filePool = xfile.NewFilePool(20)                        // 文件池
 	NoExpire = base.Datetime2TimeObj("9999-12-31 23:59:59") // 不过期
 )
 
