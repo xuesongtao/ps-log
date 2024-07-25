@@ -139,7 +139,7 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 	}
 
 	// 预处理
-	new, err := p.prePath2Handler(defaultExistSkip, path2HandlerMap)
+	new, err := p.prePath2Handler(path2HandlerMap)
 	if err != nil {
 		return err
 	}
@@ -174,17 +174,10 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 }
 
 // prePath2Handler 预处理
-func (p *PsLog) prePath2Handler(existSkip bool, path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
+func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string]*Handler, error) {
 	// 验证加处理
 	new := make(map[string]*Handler, len(path2HandlerMap))
 	for path, handler := range path2HandlerMap {
-		p.rwMu.RLock()
-		_, ok := p.logMap[path]
-		p.rwMu.RUnlock()
-		if ok && existSkip {
-			continue
-		}
-
 		path = filepath.Clean(path)
 		// 处理 handler
 		if handler == nil {
@@ -492,9 +485,10 @@ func (p *PsLog) cleanUp(t time.Time) {
 	p.rwMu.Lock()
 	defer p.rwMu.Unlock()
 	// 1. 移除监听的 path,
-	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理
+	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理, 但建议主动处理
 	for _, path := range deleteKeys {
 		delete(p.logMap, path)
+		filePool.Remove(path)
 	}
 
 	if p.watch != nil { // 如果只是 cron 的话, 此处为 nil
