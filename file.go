@@ -95,6 +95,9 @@ func (f *FileInfo) loadBeginOffset() int64 {
 
 // initOffset 初始化文件 offset
 func (f *FileInfo) initOffset() {
+	// 清理已过期文件偏移量文件
+	f.removeOffsetFile()
+
 	// 初次使用需要判断下是否需要清除偏移量
 	if f.cleanOffset() {
 		return
@@ -104,9 +107,6 @@ func (f *FileInfo) initOffset() {
 	if f.offset > 0 {
 		return
 	}
-
-	// 清理已过期文件偏移量文件
-	f.removeOffsetFile()
 
 	// 从文件中读取偏移量
 	filename := f.offsetFilename()
