@@ -42,8 +42,8 @@ func NewWatch() (*Watch, error) {
 // Add 添加待 watch 的路径
 // 说明:
 //  1. 自动去重
-//	2. paths 中可以为目录和文件
-// 	3. 建议使用绝对路径
+//  2. paths 中可以为目录和文件
+//  3. 建议使用绝对路径
 func (w *Watch) Add(paths ...string) error {
 	for _, path := range paths {
 		st, err := os.Lstat(path)
@@ -90,12 +90,11 @@ func (w *Watch) Close() {
 func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 	go func() {
 		defer func() {
-			w.Close()
-			close(busCh)
-			w.fileMap = nil
 			if err := recover(); err != nil {
 				plg.Error("Watch recover err:", debug.Stack())
 			}
+			close(busCh)
+			w.fileMap = nil
 		}()
 
 		for {
