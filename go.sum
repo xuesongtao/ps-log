@@ -1,7 +1,7 @@
 gitee.com/xuesongtao/gotool v1.3.8 h1:Dwf6RSmAEgOps+aMr4r8J70Ek1Xo3/PFhAgt0/1wdvs=
 gitee.com/xuesongtao/gotool v1.3.8/go.mod h1:Nl5l9f9uLUghfUr/g4gX/y6asDaE+wnMTQLgwa317w8=
-gitee.com/xuesongtao/taskpool v1.2.12 h1:Exma1+hFVgyQFGQwm6n7P6J6zRnQYuSgt/5OfGe8rpo=
-gitee.com/xuesongtao/taskpool v1.2.12/go.mod h1:jUpKGB45cw6tWsN/NJOhg2V75vn4weuXME93QNI4vHY=
+gitee.com/xuesongtao/taskpool v1.2.13 h1:UexY+D9oFHKflRt9JN0KeyJdJO1cN5erALVjfUEREr0=
+gitee.com/xuesongtao/taskpool v1.2.13/go.mod h1:jUpKGB45cw6tWsN/NJOhg2V75vn4weuXME93QNI4vHY=
 github.com/fsnotify/fsnotify v1.7.0 h1:8JEhPFa5W2WU7YfeZzPNqzMP6Lwt7L2715Ggo0nosvA=
 github.com/fsnotify/fsnotify v1.7.0/go.mod h1:40Bi/Hjc2AVfZrqy+aj+yEI+/bRxZnMJyTJwOpGvigM=
 github.com/mattn/go-runewidth v0.0.9 h1:Lm995f3rfxdpd6TSmuVCHVb/QhupuXlYr8sCI/QdE+0=
