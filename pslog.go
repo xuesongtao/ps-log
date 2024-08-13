@@ -422,7 +422,7 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 		if bus.skip() {
 			continue
 		}
-		plg.Info("writeTo msg:", bus.Msg)
+		// plg.Info("writeTo msg:", bus.Msg)
 		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				tmpTo, tmpBus := to, bus
