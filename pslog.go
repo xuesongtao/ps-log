@@ -403,7 +403,7 @@ func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, l
 	// plg.Info("target:", base.ToString(target))
 	// 按不同内容进行处理
 	if handler, ok := dataMap[target.no]; !ok {
-		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
+		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, TargetExt: target.Ext, buf: new(bytes.Buffer), tos: target.To}
 		bus.Write(line)
 		dataMap[target.no] = bus
 	} else {
@@ -422,7 +422,7 @@ func (p *PsLog) writer(dataMap map[int]*LogHandlerBus) {
 		if bus.skip() {
 			continue
 		}
-		plg.Info("writeTo msg:", bus.Msg)
+		// plg.Info("writeTo msg:", bus.Msg)
 		for _, to := range bus.tos {
 			if p.async2Tos { // 异步
 				tmpTo, tmpBus := to, bus

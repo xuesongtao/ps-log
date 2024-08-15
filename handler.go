@@ -27,6 +27,7 @@ type Target struct {
 	excludes Matcher
 	Excludes []string      // 排除 msg
 	To       []PsLogWriter // 一个目标内容, 多种处理方式
+	Ext      string        // 外部存入, 回调返回
 }
 
 // Handler 处理的部分
@@ -134,9 +135,10 @@ func (h *Handler) getExcludesDump() string {
 
 // logHandler 解析到的内容
 type LogHandlerBus struct {
-	LogPath string // log 的路径
-	Msg     string // buf 中的 string
-	Ext     string // Handler 中的 Ext 值
+	LogPath   string // log 的路径
+	Msg       string // buf 中的 string
+	Ext       string // Handler 中的 Ext 值
+	TargetExt string // Target 中的 Ext 值
 
 	buf *bytes.Buffer
 	tos []PsLogWriter
