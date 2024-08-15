@@ -403,7 +403,7 @@ func (p *PsLog) handleLine(fileInfo *FileInfo, dataMap map[int]*LogHandlerBus, l
 	// plg.Info("target:", base.ToString(target))
 	// 按不同内容进行处理
 	if handler, ok := dataMap[target.no]; !ok {
-		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, buf: new(bytes.Buffer), tos: target.To}
+		bus := &LogHandlerBus{LogPath: fileInfo.FileName(), Ext: fileInfo.Handler.Ext, TargetExt: target.Ext, buf: new(bytes.Buffer), tos: target.To}
 		bus.Write(line)
 		dataMap[target.no] = bus
 	} else {
