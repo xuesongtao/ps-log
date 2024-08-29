@@ -36,12 +36,13 @@ type Handler struct {
 	CleanOffset bool          // 是否需要清理保存的 offset, 只限于开机后一次
 	Tail        bool          // 是否实时处理, 说明: true 为实时; false 需要外部定时调用
 	Change      int32         // 文件 offset 变化次数, 为持久化文件偏移量数阈值, 当, 说明: -1 为实时保存; 0 达到默认值 defaultHandleChange 时保存; 其他 大于后会保存
-	ExpireDur   time.Duration // 文件句柄过期间隔, 常用于全局配置
+	ExpireDur   time.Duration // 文件句柄过期间隔, 常用于全局配置, 如果没有, 默认 1 小时
 	ExpireAt    time.Time     // 文件句柄过期时间, 优先 ExpireDur 如: 2022-12-03 11:11:10
 	MergeRule   line.Merger   // 日志文件行合并规则, 默认 单行处理
 	targets     Matcher
-	Targets     []*Target // 目标 msg
-	Ext         string    // 外部存入, 回调返回
+	Targets     []*Target                  // 目标 msg
+	Ext         string                     // 外部存入, 回调返回
+	NeedCollect func(filename string) bool // 当监听的对象为目录时, 判断文件是否需要采集, 注: 采集的 path 为 dir 的时候, 这里必须填
 }
 
 // initMatcher 初始化匹配
@@ -51,6 +52,10 @@ func (h *Handler) initMatcher(arrLen int) Matcher {
 		return &Simple{}
 	}
 	return newTire()
+}
+
+func (h *Handler) IsDir() bool {
+	return h.NeedCollect != nil
 }
 
 func (h *Handler) Valid() error {

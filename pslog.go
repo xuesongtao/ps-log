@@ -131,6 +131,11 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 	return p.addLogPath(path2HandlerMap)
 }
 
+// AddDir2HandleMap 添加目录
+func (p *PsLog) AddDir2HandleMap(dir2HandleMap map[string]*Handler) error {
+	return p.addLogPath(dir2HandleMap)
+}
+
 // addLogPath 添加 log path, 同时添加监听 log path
 func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...bool) error {
 	defaultExistSkip := true // 默认新增, 存在跳过
@@ -157,13 +162,13 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		if ok {
 			fileInfo.Handler = handler
 		} else {
-			fileInfo = &FileInfo{Handler: handler}
+			fileInfo = &FileInfo{Handler: handler, fhMap: make(map[string]*fileHandleInfo)}
 			fileInfo.Parse(path)
+			fileInfo.initOffset()
 		}
-		fileInfo.initOffset()
 		if p.tail && handler.Tail {
 			// 直接监听对应的目录
-			if err := p.watch.Add(fileInfo.FileName()); err != nil {
+			if err := p.watch.Add(path); err != nil {
 				return fmt.Errorf("p.watch.Add is failed, err: %v", err)
 			}
 		}
@@ -197,8 +202,8 @@ func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string
 		if err != nil {
 			return nil, fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
 		}
-		if st.IsDir() {
-			return nil, fmt.Errorf("%q is dir, it should file", path)
+		if st.IsDir() && handler.NeedCollect == nil {
+			return nil, fmt.Errorf("%q is dir, NeedCollect also is nil", path)
 		}
 		new[path] = handler
 	}
@@ -260,6 +265,13 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 				plg.Infof("%q is not exist", watchInfo.Path)
 				continue
 			}
+
+			// 如果是目录, 判断下是否需要采集
+			if watchInfo.IsDir && !fileInfo.needCollect(watchInfo.ChangedFilename) {
+				continue
+			}
+			fileInfo.isRename = watchInfo.IsRename
+
 			if !fileInfo.Handler.Tail {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
@@ -312,14 +324,12 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	fileInfo.mu.Lock()
 	defer fileInfo.mu.Unlock()
 
-	fh, err := filePool.Get(fileInfo.FileName(), os.O_RDONLY)
+	f, err := fileInfo.getFileHandle()
 	if err != nil {
-		plg.Errorf("filePool.Get %q is failed, err: %v", fileInfo.FileName(), err)
+		plg.Error("fileInfo.getFileHandle is failed, err:", err)
 		return
 	}
-	defer filePool.Put(fh)
 
-	f := fh.GetFile()
 	st, err := f.Stat()
 	if err != nil {
 		plg.Error("f.Stat is failed, err:", err)
@@ -372,6 +382,12 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
+	}
+
+	// 是否修改名称
+	if fileInfo.isRename {
+		fileInfo.closeFileHandle()
+		return
 	}
 
 	// 保存偏移量
@@ -487,12 +503,17 @@ func (p *PsLog) cleanUp(t time.Time) {
 	// 1. 移除监听的 path,
 	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理, 但建议主动处理
 	for _, path := range deleteKeys {
+		fileInfo := p.logMap[path]
+		if fileInfo.Handler.IsDir() {
+			fileInfo.close()
+			continue
+		}
 		delete(p.logMap, path)
 		filePool.Remove(path)
-	}
 
-	if p.watch != nil { // 如果只是 cron 的话, 此处为 nil
-		p.watch.Remove(deleteKeys...)
+		if p.watch != nil { // 如果只是 cron 的话, 此处为 nil
+			p.watch.Remove(path)
+		}
 	}
 }
 

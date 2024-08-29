@@ -21,8 +21,11 @@ type Watch struct {
 
 // WatchFileInfo
 type WatchFileInfo struct {
-	IsDir bool   // 是否为目录
-	Path  string // 原始添加的文件路径, 这里可能是文件路径或目录路径
+	IsDir           bool   // 是否为目录
+	Dir             string // 原始目录路径
+	Path            string // 原始添加的文件路径, 这里可能是文件路径或目录路径
+	IsRename        bool   // 是否修改名字
+	ChangedFilename string // 被监听到的文件名, 绝对路径
 }
 
 // NewWatch 监听
@@ -54,14 +57,18 @@ func (w *Watch) Add(paths ...string) error {
 		if _, ok := w.fileMap[path]; ok {
 			continue
 		}
-		watchFileInfo := &WatchFileInfo{IsDir: false, Path: path}
+		watchFileInfo := &WatchFileInfo{IsDir: false, Path: path, Dir: path}
 		if st.IsDir() {
 			watchFileInfo.IsDir = true
+		} else {
+			watchFileInfo.Dir = filepath.Dir(path)
 		}
 
 		// 保存和监听
 		w.fileMap[path] = watchFileInfo
-		if err := w.watcher.Add(path); err != nil {
+
+		// 只监听目录
+		if err := w.watcher.Add(watchFileInfo.Dir); err != nil {
 			return fmt.Errorf("w.watcher.Add is failed, err: %v", err)
 		}
 	}
@@ -72,17 +79,20 @@ func (w *Watch) Add(paths ...string) error {
 func (w *Watch) Remove(paths ...string) error {
 	for _, path := range paths {
 		path = filepath.Clean(path)
-		delete(w.fileMap, path)
-		if err := w.watcher.Remove(path); err != nil {
-			return fmt.Errorf("w.watcher.Remove is failed, err: %v", err)
+		info, ok := w.fileMap[path]
+		if ok && info.IsDir {
+			if err := w.watcher.Remove(info.Dir); err != nil {
+				return fmt.Errorf("w.watcher.Remove is failed, err: %v", err)
+			}
 		}
+		delete(w.fileMap, path)
 	}
 	return nil
 }
 
 // Close
 func (w *Watch) Close() {
-	// w.fileMap = nil
+	w.fileMap = nil
 	w.watcher.Close()
 }
 
@@ -112,7 +122,7 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 				}
 
 				// 只处理 create, write
-				if !w.inEvenOps(event.Op, fs.Write, fs.Create) {
+				if !w.inEvenOps(event.Op, fs.Write, fs.Create, fs.Rename) {
 					continue
 				}
 
@@ -121,6 +131,8 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 				if watchFileInfo == nil {
 					continue
 				}
+				watchFileInfo.IsRename = event.Op == fs.Rename
+				watchFileInfo.ChangedFilename = event.Name
 				busCh <- watchFileInfo
 			}
 		}
