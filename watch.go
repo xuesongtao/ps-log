@@ -49,11 +49,11 @@ func NewWatch() (*Watch, error) {
 //  3. 建议使用绝对路径
 func (w *Watch) Add(paths ...string) error {
 	for _, path := range paths {
+		path = filepath.Clean(path)
 		st, err := os.Lstat(path)
 		if err != nil {
 			return fmt.Errorf("os.Lstat is failed, err: %v", err)
 		}
-		path = filepath.Clean(path)
 		if _, ok := w.fileMap[path]; ok {
 			continue
 		}

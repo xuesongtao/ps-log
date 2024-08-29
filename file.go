@@ -20,15 +20,16 @@ const (
 )
 
 type FileInfo struct {
-	Handler      *Handler                   // 这里优先 PsLog.handler
-	Dir          string                     // 文件目录
-	Name         string                     // 文件名
-	isRename     bool                       // 是否修改文件名
-	fhMap        map[string]*fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
-	offsetChange int32                      // 记录 offset 变化次数
-	offset       int64                      // 当前文件偏移量
-	beginOffset  int64                      // 记录最开始的偏移量
-	mu           sync.Mutex
+	Handler         *Handler                   // 这里优先 PsLog.handler
+	Dir             string                     // 文件目录路径
+	Name            string                     // 文件名
+	changedFilename string                     // 监听到变化的文件名
+	isRename        bool                       // 是否修改文件名
+	fhMap           map[string]*fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
+	offsetChange    int32                      // 记录 offset 变化次数
+	offset          int64                      // 当前文件偏移量
+	beginOffset     int64                      // 记录最开始的偏移量
+	mu              sync.Mutex
 }
 
 type fileHandleInfo struct {
@@ -93,11 +94,21 @@ func (f *FileInfo) needCollect(filename string) bool {
 
 // FileName 获取文件的全路径名
 func (f *FileInfo) FileName() string {
+	if f.Handler.isDir {
+		if f.changedFilename == "" {
+			return f.Dir
+		}
+		return f.changedFilename
+	}
 	return filepath.Join(f.Dir, f.Name)
 }
 
 // Parse 解析 path
 func (f *FileInfo) Parse(path string) {
+	if f.Handler.isDir {
+		f.Dir = path
+		return
+	}
 	f.Dir, f.Name = filepath.Split(path)
 }
 

@@ -65,7 +65,7 @@ type PsLog struct {
 	watch         *Watch              // 文件监听
 	watchCh       chan *WatchFileInfo // 文件监听文件内容
 	closeCh       chan struct{}
-	logMap        map[string]*FileInfo // key: 文件路径
+	logMap        map[string]*FileInfo // key: 文件路径, 注: 里面包含 文件/目录
 }
 
 // NewPsLog 是根据提供的 log path 进行逐行解析
@@ -132,8 +132,8 @@ func (p *PsLog) AddPath2HandlerMap(path2HandlerMap map[string]*Handler) error {
 }
 
 // AddDir2HandleMap 添加目录
-func (p *PsLog) AddDir2HandleMap(dir2HandleMap map[string]*Handler) error {
-	return p.addLogPath(dir2HandleMap)
+func (p *PsLog) AddDir2Handle(dir string, handler *Handler) error {
+	return p.addLogPath(map[string]*Handler{dir: handler})
 }
 
 // addLogPath 添加 log path, 同时添加监听 log path
@@ -187,7 +187,7 @@ func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string
 		// 处理 handler
 		if handler == nil {
 			if p.handler != nil {
-				handler = p.handler
+				handler = p.handler.copy()
 			} else {
 				return nil, fmt.Errorf("%q no has handler", path)
 			}
@@ -205,6 +205,8 @@ func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string
 		if st.IsDir() && handler.NeedCollect == nil {
 			return nil, fmt.Errorf("%q is dir, NeedCollect also is nil", path)
 		}
+		handler.isDir = st.IsDir()
+		handler.path = path
 		new[path] = handler
 	}
 	return new, nil
@@ -270,8 +272,8 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 			if watchInfo.IsDir && !fileInfo.needCollect(watchInfo.ChangedFilename) {
 				continue
 			}
+			fileInfo.changedFilename = watchInfo.ChangedFilename
 			fileInfo.isRename = watchInfo.IsRename
-
 			if !fileInfo.Handler.Tail {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
@@ -294,6 +296,10 @@ func (p *PsLog) CronLogs(makeUpTail ...bool) {
 	p.rwMu.RLock()
 	tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
 	for path, fileInfo := range p.logMap {
+		if fileInfo.Handler.isDir {
+			plg.Warningf("cron %q is dir, it will skip", path)
+			continue
+		}
 		tmpLogMap[path] = fileInfo
 	}
 	p.rwMu.RUnlock()
@@ -387,6 +393,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	// 是否修改名称
 	if fileInfo.isRename {
 		fileInfo.closeFileHandle()
+		fileInfo.isRename = false
 		return
 	}
 

@@ -43,6 +43,24 @@ type Handler struct {
 	Targets     []*Target                  // 目标 msg
 	Ext         string                     // 外部存入, 回调返回
 	NeedCollect func(filename string) bool // 当监听的对象为目录时, 判断文件是否需要采集, 注: 采集的 path 为 dir 的时候, 这里必须填
+
+	isDir bool
+	path  string // 原始 path
+}
+
+func (h *Handler) copy() *Handler {
+	return &Handler{
+		LoopParse:   h.LoopParse,
+		CleanOffset: h.CleanOffset,
+		Tail:        h.Tail,
+		Change:      h.Change,
+		ExpireDur:   h.ExpireDur,
+		ExpireAt:    h.ExpireAt,
+		MergeRule:   h.MergeRule,
+		Targets:     h.Targets,
+		Ext:         h.Ext,
+		NeedCollect: h.NeedCollect,
+	}
 }
 
 // initMatcher 初始化匹配
