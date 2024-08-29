@@ -97,6 +97,9 @@ func TestTail(t *testing.T) {
 	if err := ps.Register(handler); err != nil {
 		t.Fatal(err)
 	}
+	if err := ps.AddPaths(tmp); err != nil {
+		t.Fatal(err)
+	}
 	closeCh := make(chan struct{})
 	go func() {
 		fh := xfile.NewFileHandle(tmp)
@@ -117,9 +120,80 @@ func TestTail(t *testing.T) {
 		time.Sleep(time.Second * 2)
 		close(closeCh)
 	}()
-	if err := ps.AddPaths(tmp); err != nil {
+
+	for range closeCh {
+	}
+
+	data, err := xfile.GetContent(tmp)
+	if err != nil {
 		t.Fatal(err)
 	}
+
+	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
+		t.Error("data:", data)
+		t.Error("byteBuf:", byteBuf.Buf.String())
+		t.Error("strBuf:", strBuf.Buf.String())
+	}
+}
+
+func TestTailLogRename(t *testing.T) {
+	ps, _ := NewPsLog()
+	defer ps.Close()
+	err := ps.TailLogs()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	strBuf := new(StrBuf)
+	byteBuf := new(BytesBuf)
+	stdout := new(Stdout)
+	tmp := tmpDir + "/test2tail-rename.log"
+	handler := &Handler{
+		CleanOffset: true,
+		Change:      -1,       // 每次都持久化 offset
+		Tail:        true,     // 实时监听
+		ExpireAt:    NoExpire, // 文件句柄不过期
+		Targets: []*Target{
+			{
+				Content:  "warning",
+				Excludes: []string{},
+				To:       []PsLogWriter{strBuf, byteBuf, stdout},
+			},
+		},
+	}
+
+	if err := ps.AddPath2Handler(tmp, handler); err != nil {
+		t.Fatal(err)
+	}
+	closeCh := make(chan struct{})
+	go func() {
+		fh := xfile.NewFileHandle(tmp)
+		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
+			plg.Error(err)
+			return
+		}
+		defer fh.Close()
+
+		f := fh.GetFile()
+		for i := 0; i < 2; i++ {
+			// time.Sleep(time.Microsecond)
+			_, err := f.WriteString(`{"level":"warning","msg":"q","time":"2024-02-02 17:57:10.399"}` + "\n")
+			if err != nil {
+				plg.Error("write err:", err)
+			}
+		}
+		xfile.AppendContent(tmp, "warning 文件分割之前, 1111"+"\n")
+
+		newLog := tmpDir + "/test2tail-rename-1.log"
+		// // 模拟日志分割
+		os.Rename(tmp, newLog)
+		time.Sleep(time.Second)
+		xfile.AppendContent(newLog, "warning 文件分割之后 1111"+"\n")
+		defer os.Rename(newLog, tmp)
+
+		time.Sleep(time.Second * 10)
+		close(closeCh)
+	}()
 
 	for range closeCh {
 	}

@@ -20,18 +20,75 @@ const (
 )
 
 type FileInfo struct {
-	Handler      *Handler // 这里优先 PsLog.handler
-	Dir          string   // 文件目录
-	Name         string   // 文件名
-	offsetChange int32    // 记录 offset 变化次数
-	offset       int64    // 当前文件偏移量
-	beginOffset  int64    // 记录最开始的偏移量
+	Handler      *Handler                   // 这里优先 PsLog.handler
+	Dir          string                     // 文件目录
+	Name         string                     // 文件名
+	isRename     bool                       // 是否修改文件名
+	fhMap        map[string]*fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
+	offsetChange int32                      // 记录 offset 变化次数
+	offset       int64                      // 当前文件偏移量
+	beginOffset  int64                      // 记录最开始的偏移量
 	mu           sync.Mutex
+}
+
+type fileHandleInfo struct {
+	f          *os.File
+	createTime time.Time
 }
 
 // HandlerIsNil
 func (f *FileInfo) HandlerIsNil() bool {
 	return f.Handler == nil
+}
+
+// getFileHandle 获取文件 handle
+func (f *FileInfo) getFileHandle() (*os.File, error) {
+	filename := f.FileName()
+	fhInfo := f.fhMap[filename]
+	var err error
+	if fhInfo == nil {
+		fhInfo = new(fileHandleInfo)
+		fhInfo.f, err = os.Open(filename)
+		if err != nil {
+			return nil, err
+		}
+		fhInfo.createTime = time.Now()
+		f.fhMap[filename] = fhInfo
+	}
+	return fhInfo.f, nil
+}
+
+// closeFileHandle 检查句柄账号
+func (f *FileInfo) closeFileHandle() {
+	filename := f.FileName()
+	fhInfo := f.fhMap[filename]
+	if fhInfo == nil {
+		return
+	}
+
+	// 如果关联的文件句柄名被修改了, 这里需要释放下
+	fhInfo.f.Close()
+	f.beginOffset = 0
+	f.offset = 0
+	f.saveOffset(true, f.offset) // 强刷下
+	f.fhMap[filename] = nil
+}
+
+// Close 句柄
+func (f *FileInfo) close() {
+	for _, fhInfo := range f.fhMap {
+		if f.IsExpire(fhInfo.createTime) {
+			fhInfo.f.Close()
+		}
+	}
+}
+
+// NeedCollect 判断下是否需要被采集
+func (f *FileInfo) needCollect(filename string) bool {
+	if f.Handler.NeedCollect == nil {
+		return false
+	}
+	return f.Handler.NeedCollect(filename)
 }
 
 // FileName 获取文件的全路径名
