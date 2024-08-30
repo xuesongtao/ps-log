@@ -66,7 +66,6 @@ func (w *Watch) Add(paths ...string) error {
 
 		// 保存和监听
 		w.fileMap[path] = watchFileInfo
-
 		// 只监听目录
 		if err := w.watcher.Add(watchFileInfo.Dir); err != nil {
 			return fmt.Errorf("w.watcher.Add is failed, err: %v", err)

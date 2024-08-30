@@ -20,21 +20,98 @@ const (
 )
 
 type FileInfo struct {
-	Handler         *Handler                   // 这里优先 PsLog.handler
-	Dir             string                     // 文件目录路径
-	Name            string                     // 文件名
-	changedFilename string                     // 监听到变化的文件名
-	isRename        bool                       // 是否修改文件名
-	fhMap           map[string]*fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
-	offsetChange    int32                      // 记录 offset 变化次数
-	offset          int64                      // 当前文件偏移量
-	beginOffset     int64                      // 记录最开始的偏移量
-	mu              sync.Mutex
+	Dir     string   // 文件目录路径
+	Name    string   // 文件名
+	Handler *Handler // 这里优先 PsLog.handler
+	mu      sync.Mutex
+
+	// 父级特有参数
+	watchChangedFilename string               // 监听到变化的文件名
+	isRename             bool                 // 是否修改文件名
+	children             map[string]*FileInfo // 如果当前为目录的时候, 这里就有值, key: 文件名[这里不是全路径]
+
+	// 子级特有参数
+	fh           *fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
+	offsetChange int32           // 记录 offset 变化次数
+	offset       int64           // 当前文件偏移量
+	beginOffset  int64           // 记录最开始的偏移量
 }
 
 type fileHandleInfo struct {
 	f          *os.File
 	createTime time.Time
+}
+
+// NewFileInfo 初始化
+func NewFileInfo(path string, handler Handler) (*FileInfo, error) {
+	fileInfo := &FileInfo{
+		Dir:                  "",
+		Name:                 "",
+		Handler:              &handler,
+		watchChangedFilename: "",
+		isRename:             false,
+		fh:                   &fileHandleInfo{},
+		offsetChange:         0,
+		offset:               0,
+		beginOffset:          0,
+		mu:                   sync.Mutex{},
+		children:             map[string]*FileInfo{},
+	}
+
+	if !handler.initd {
+		handler.path = path
+		if err := handler.init(); err != nil {
+			return nil, err
+		}
+	}
+	fileInfo.init()
+	return fileInfo, nil
+}
+
+func (f *FileInfo) init() {
+	f.Parse(f.Handler.path)
+	if !f.IsDir() {
+		f.initOffset()
+		return
+	}
+
+	// 如果是目录的话需要初始化 children
+	f.loopDir(f.Handler.path, func(info os.FileInfo) error {
+		filename := info.Name()
+		if f.needCollect(filename) {
+			_, err := f.getFileInfo(filepath.Join(f.Dir, filename))
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Extension 延期
+func (f *FileInfo) Extension() {
+	f.Handler.ExpireAt = time.Now().Add(f.Handler.ExpireDur)
+}
+
+// getFileInfo 根据文件全路径名获取 FileInfo
+func (f *FileInfo) getFileInfo(filename string) (*FileInfo, error) {
+	if filename != f.Dir { // 当前 FileInfo 为文件
+		return f, nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// FileInfo 为目录
+	basename := filepath.Base(filename)
+	tmp, ok := f.children[basename]
+	if ok {
+		return tmp, nil
+	}
+	tmp, err := NewFileInfo(filename, *f.Handler)
+	if err != nil {
+		return nil, err
+	}
+	f.children[basename] = tmp
+	return tmp, nil
 }
 
 // HandlerIsNil
@@ -45,67 +122,70 @@ func (f *FileInfo) HandlerIsNil() bool {
 // getFileHandle 获取文件 handle
 func (f *FileInfo) getFileHandle() (*os.File, error) {
 	filename := f.FileName()
-	fhInfo := f.fhMap[filename]
 	var err error
-	if fhInfo == nil {
-		fhInfo = new(fileHandleInfo)
-		fhInfo.f, err = os.Open(filename)
+	if f.fh == nil {
+		ff := new(fileHandleInfo)
+		ff.f, err = os.Open(filename)
 		if err != nil {
 			return nil, err
 		}
-		fhInfo.createTime = time.Now()
-		f.fhMap[filename] = fhInfo
+		ff.createTime = time.Now()
+		f.fh = ff
 	}
-	return fhInfo.f, nil
+	return f.fh.f, nil
 }
 
 // closeFileHandle 检查句柄账号
-func (f *FileInfo) closeFileHandle() {
-	filename := f.FileName()
-	fhInfo := f.fhMap[filename]
-	if fhInfo == nil {
+func (f *FileInfo) closeFileHandle(cleanOffset ...bool) {
+	if f.fh == nil {
+		return
+	}
+	f.fh.f.Close()
+
+	if len(cleanOffset) > 0 && cleanOffset[0] {
+		f.beginOffset = 0
+		f.offset = 0
+		f.saveOffset(true, f.offset) // 强刷下
+	}
+}
+
+// expireClose 到期关闭句柄
+func (f *FileInfo) expireClose() {
+	if !f.IsExpire(f.fh.createTime) {
 		return
 	}
 
-	// 如果关联的文件句柄名被修改了, 这里需要释放下
-	fhInfo.f.Close()
-	f.beginOffset = 0
-	f.offset = 0
-	f.saveOffset(true, f.offset) // 强刷下
-	f.fhMap[filename] = nil
-}
+	if !f.IsDir() {
+		f.closeFileHandle()
+		return
+	}
 
-// Close 句柄
-func (f *FileInfo) close() {
-	for _, fhInfo := range f.fhMap {
-		if f.IsExpire(fhInfo.createTime) {
-			fhInfo.f.Close()
-		}
+	for _, fileInfo := range f.children {
+		fileInfo.expireClose()
 	}
 }
 
 // NeedCollect 判断下是否需要被采集
 func (f *FileInfo) needCollect(filename string) bool {
-	if f.Handler.NeedCollect == nil {
+	if f.HandlerIsNil() {
 		return false
 	}
 	return f.Handler.NeedCollect(filename)
 }
 
+// IsDir 是否为目录
+func (f *FileInfo) IsDir() bool {
+	return f.Handler.isDir
+}
+
 // FileName 获取文件的全路径名
 func (f *FileInfo) FileName() string {
-	if f.Handler.isDir {
-		if f.changedFilename == "" {
-			return f.Dir
-		}
-		return f.changedFilename
-	}
 	return filepath.Join(f.Dir, f.Name)
 }
 
 // Parse 解析 path
 func (f *FileInfo) Parse(path string) {
-	if f.Handler.isDir {
+	if f.IsDir() {
 		f.Dir = path
 		return
 	}
@@ -118,7 +198,7 @@ func (f *FileInfo) IsExpire(t ...time.Time) bool {
 	if len(t) > 0 {
 		defaultTime = t[0]
 	}
-	if f.Handler != nil {
+	if !f.HandlerIsNil() {
 		return f.Handler.ExpireAt.Before(defaultTime)
 	}
 	return false
@@ -263,22 +343,38 @@ func (f *FileInfo) removeOffsetFile(filename ...string) {
 	}
 
 	// 移除当前目录下cleanOffsetFileDayDur天前的文件
-	offsetFiles, err := os.ReadDir(f.offsetDir())
-	if err != nil {
-		plg.Errorf("ioutil.ReadDir %q is failed, err: %v", f.offsetDir(), err)
-		return
-	}
 	curTime := time.Now()
-	for _, offsetFile := range offsetFiles {
-		info, _ := offsetFile.Info()
+	f.loopDir(f.offsetDir(), func(info os.FileInfo) error {
 		if curTime.Sub(info.ModTime())/base.DayDur <= cleanOffsetFileDayDur {
-			continue
+			return nil
 		}
 
-		delFilename := filepath.Join(f.offsetDir(), offsetFile.Name())
+		delFilename := filepath.Join(f.offsetDir(), info.Name())
 		if err := os.Remove(delFilename); err != nil {
 			plg.Warningf("os.Remove %q is failed, err: %v", delFilename, err)
 		}
 		f.remove(delFilename)
+		return nil
+	})
+}
+
+// loopDir 遍历目录, 只会遍历一级子级
+func (f *FileInfo) loopDir(path string, handle func(info os.FileInfo) error) error {
+	entrys, err := os.ReadDir(path)
+	if err != nil {
+		return fmt.Errorf("ioutil.ReadDir %q is failed, err: %v", path, err)
 	}
+	for _, entry := range entrys {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if err := handle(info); err != nil {
+			return err
+		}
+	}
+	return nil
 }

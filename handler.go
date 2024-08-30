@@ -46,6 +46,7 @@ type Handler struct {
 
 	isDir bool
 	path  string // 原始 path
+	initd bool   // 是否已经初始化
 }
 
 func (h *Handler) copy() *Handler {
@@ -72,10 +73,6 @@ func (h *Handler) initMatcher(arrLen int) Matcher {
 	return newTire()
 }
 
-func (h *Handler) IsDir() bool {
-	return h.NeedCollect != nil
-}
-
 func (h *Handler) Valid() error {
 	if h.ExpireAt.IsZero() && h.ExpireDur == 0 {
 		return errors.New("ExpireAt, ExpireDur can not both null")
@@ -96,9 +93,22 @@ func (h *Handler) Valid() error {
 	return nil
 }
 
-func (h *Handler) init() {
+func (h *Handler) init() error {
+	if h.initd {
+		return nil
+	}
+
+	if err := h.Valid(); err != nil {
+		return err
+	}
+
+	h.initd = true
 	if h.Change == 0 {
 		h.Change = defaultHandleChange
+	}
+
+	if h.ExpireDur == 0 {
+		h.ExpireDur = time.Hour
 	}
 
 	if h.ExpireAt.IsZero() {
@@ -127,6 +137,18 @@ func (h *Handler) init() {
 		}
 		no++
 	}
+
+	// 判断下是否为目录
+	st, err := os.Stat(h.path)
+	if err != nil {
+		return fmt.Errorf("os.Stat %q is failed, err: %v", h.path, err)
+	}
+	h.isDir = st.IsDir()
+
+	if h.isDir && h.NeedCollect == nil {
+		return fmt.Errorf("%q is dir, NeedCollect also is nil", h.path)
+	}
+	return nil
 }
 
 func (h *Handler) getTargetDump() string {
