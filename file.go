@@ -12,6 +12,7 @@ import (
 
 	"gitee.com/xuesongtao/gotool/base"
 	plg "gitee.com/xuesongtao/ps-log/log"
+	fs "github.com/fsnotify/fsnotify"
 )
 
 const (
@@ -20,42 +21,38 @@ const (
 )
 
 type FileInfo struct {
-	Dir     string   // 文件目录路径
-	Name    string   // 文件名
-	Handler *Handler // 这里优先 PsLog.handler
-	mu      sync.Mutex
+	Dir                 string   // 文件目录路径
+	Name                string   // 文件名
+	Handler             *Handler // 这里优先 PsLog.handler
+	mu                  sync.Mutex
+	watchChangeFilename string
+	filename            string
 
 	// 父级特有参数
-	watchChangedFilename string               // 监听到变化的文件名
-	isRename             bool                 // 是否修改文件名
-	children             map[string]*FileInfo // 如果当前为目录的时候, 这里就有值, key: 文件名[这里不是全路径]
+	op       fs.Op
+	children map[string]*FileInfo // 如果当前为目录的时候, 这里就有值, key: 文件名[这里不是全路径]
 
 	// 子级特有参数
-	fh           *fileHandleInfo // 存放的文件句柄, 只有 可读权限, key: filename
-	offsetChange int32           // 记录 offset 变化次数
-	offset       int64           // 当前文件偏移量
-	beginOffset  int64           // 记录最开始的偏移量
-}
-
-type fileHandleInfo struct {
-	f          *os.File
-	createTime time.Time
+	fh           *os.File // 存放的文件句柄, 只有 可读权限, key: filename
+	offsetChange int32    // 记录 offset 变化次数
+	offset       int64    // 当前文件偏移量
+	beginOffset  int64    // 记录最开始的偏移量
 }
 
 // NewFileInfo 初始化
-func NewFileInfo(path string, handler Handler) (*FileInfo, error) {
+func NewFileInfo(path string, handler *Handler) (*FileInfo, error) {
 	fileInfo := &FileInfo{
-		Dir:                  "",
-		Name:                 "",
-		Handler:              &handler,
-		watchChangedFilename: "",
-		isRename:             false,
-		fh:                   &fileHandleInfo{},
-		offsetChange:         0,
-		offset:               0,
-		beginOffset:          0,
-		mu:                   sync.Mutex{},
-		children:             map[string]*FileInfo{},
+		Dir:                 "",
+		Name:                "",
+		Handler:             handler,
+		mu:                  sync.Mutex{},
+		watchChangeFilename: "",
+		op:                  0,
+		children:            make(map[string]*FileInfo),
+		fh:                  nil,
+		offsetChange:        0,
+		offset:              0,
+		beginOffset:         0,
 	}
 
 	if !handler.initd {
@@ -68,24 +65,55 @@ func NewFileInfo(path string, handler Handler) (*FileInfo, error) {
 	return fileInfo, nil
 }
 
-func (f *FileInfo) init() {
+func (f *FileInfo) init() error {
+	// fmt.Println("-----", f.Handler.path, f.IsDir())
 	f.Parse(f.Handler.path)
 	if !f.IsDir() {
+		f.initFh()
 		f.initOffset()
-		return
+		return nil
 	}
 
 	// 如果是目录的话需要初始化 children
-	f.loopDir(f.Handler.path, func(info os.FileInfo) error {
-		filename := info.Name()
+	return f.loopDir(f.Handler.path, func(info os.FileInfo) error {
+		filename := filepath.Join(f.Dir, info.Name())
+		// fmt.Println("=====",filename)
 		if f.needCollect(filename) {
-			_, err := f.getFileInfo(filepath.Join(f.Dir, filename))
+			tmp, err := NewFileInfo(filename, f.Handler.copy())
 			if err != nil {
 				return err
 			}
+			f.children[info.Name()] = tmp
 		}
 		return nil
 	})
+}
+
+func isRename(op fs.Op) bool {
+	return op.Has(fs.Rename)
+}
+
+func isCreate(op fs.Op) bool {
+	return op.Has(fs.Create)
+}
+
+func (f *FileInfo) initFh() error {
+	if f.fh != nil {
+		return nil
+	}
+
+	ff, err := os.Open(f.FileName())
+	if err != nil {
+		return err
+	}
+	f.fh = ff
+	return nil
+}
+
+func (f *FileInfo) resetFn() {
+	f.closeFileHandle()
+	f.offset = 0
+	f.saveOffset(true, f.offset)
 }
 
 // Extension 延期
@@ -95,9 +123,11 @@ func (f *FileInfo) Extension() {
 
 // getFileInfo 根据文件全路径名获取 FileInfo
 func (f *FileInfo) getFileInfo(filename string) (*FileInfo, error) {
-	if filename != f.Dir { // 当前 FileInfo 为文件
+	// fmt.Println("getFileInfo:", filename, f.FileName())
+	if !f.IsDir() { // 当前 FileInfo 为文件
 		return f, nil
 	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// FileInfo 为目录
@@ -106,7 +136,7 @@ func (f *FileInfo) getFileInfo(filename string) (*FileInfo, error) {
 	if ok {
 		return tmp, nil
 	}
-	tmp, err := NewFileInfo(filename, *f.Handler)
+	tmp, err := NewFileInfo(filename, f.Handler.copy())
 	if err != nil {
 		return nil, err
 	}
@@ -121,37 +151,24 @@ func (f *FileInfo) HandlerIsNil() bool {
 
 // getFileHandle 获取文件 handle
 func (f *FileInfo) getFileHandle() (*os.File, error) {
-	filename := f.FileName()
-	var err error
-	if f.fh == nil {
-		ff := new(fileHandleInfo)
-		ff.f, err = os.Open(filename)
-		if err != nil {
-			return nil, err
-		}
-		ff.createTime = time.Now()
-		f.fh = ff
+	if err := f.initFh(); err != nil {
+		return nil, err
 	}
-	return f.fh.f, nil
+	return f.fh, nil
 }
 
 // closeFileHandle 检查句柄账号
-func (f *FileInfo) closeFileHandle(cleanOffset ...bool) {
+func (f *FileInfo) closeFileHandle() {
 	if f.fh == nil {
 		return
 	}
-	f.fh.f.Close()
-
-	if len(cleanOffset) > 0 && cleanOffset[0] {
-		f.beginOffset = 0
-		f.offset = 0
-		f.saveOffset(true, f.offset) // 强刷下
-	}
+	f.fh.Close()
+	f.fh = nil
 }
 
 // expireClose 到期关闭句柄
 func (f *FileInfo) expireClose() {
-	if !f.IsExpire(f.fh.createTime) {
+	if !f.IsExpire() {
 		return
 	}
 
@@ -180,7 +197,11 @@ func (f *FileInfo) IsDir() bool {
 
 // FileName 获取文件的全路径名
 func (f *FileInfo) FileName() string {
-	return filepath.Join(f.Dir, f.Name)
+	if f.filename != "" {
+		return f.filename
+	}
+	f.filename = filepath.Join(f.Dir, f.Name)
+	return f.filename
 }
 
 // Parse 解析 path
@@ -224,9 +245,13 @@ func (f *FileInfo) offsetDir() string {
 }
 
 // offsetFilename 获取保存文件偏移量的名称
-func (f *FileInfo) offsetFilename() string {
+func (f *FileInfo) offsetFilename(suffix ...string) string {
 	// 处理为 xxx/.pslog/offset/_xxx.log.txt
-	return filepath.Join(f.offsetDir(), "_"+f.Name+".txt")
+	name := f.Name
+	if len(suffix) > 0 && suffix[0] != "" {
+		name += "_" + suffix[0]
+	}
+	return filepath.Join(f.offsetDir(), "_"+name+".txt")
 }
 
 func (f *FileInfo) storeOffset(o int64) {

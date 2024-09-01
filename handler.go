@@ -58,9 +58,13 @@ func (h *Handler) copy() *Handler {
 		ExpireDur:   h.ExpireDur,
 		ExpireAt:    h.ExpireAt,
 		MergeRule:   h.MergeRule,
+		// targets:     nil,
 		Targets:     h.Targets,
 		Ext:         h.Ext,
 		NeedCollect: h.NeedCollect,
+		// isDir:       false,
+		// path:        "",
+		// initd:       false,
 	}
 }
 
@@ -146,7 +150,7 @@ func (h *Handler) init() error {
 	h.isDir = st.IsDir()
 
 	if h.isDir && h.NeedCollect == nil {
-		return fmt.Errorf("%q is dir, NeedCollect also is nil", h.path)
+		return fmt.Errorf("%q is dir, NeedCollect is nil", h.path)
 	}
 	return nil
 }

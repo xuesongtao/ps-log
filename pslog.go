@@ -160,12 +160,9 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 
 		// 保存 file
 		if ok {
-			fileInfo.Handler = handler.copy()
-			if err := fileInfo.Handler.init(); err != nil {
-				return err
-			}
+			fileInfo.Handler = handler
 		} else {
-			fileInfo, err = NewFileInfo(path, *handler)
+			fileInfo, err = NewFileInfo(path, handler)
 			if err != nil {
 				return err
 			}
@@ -231,7 +228,7 @@ func (p *PsLog) Close() {
 func (p *PsLog) TailLogs(watchChSize ...int) error {
 	p.tail = true
 
-	size := 1 << 4
+	size := 2
 	if len(watchChSize) > 0 && watchChSize[0] > 0 {
 		size = watchChSize[0]
 	}
@@ -263,10 +260,10 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 
 			// 如果是目录, 判断下是否需要采集
 			if fileInfo.IsDir() && !fileInfo.needCollect(watchInfo.ChangedFilename) {
+				plg.Infof("%q no need collect", watchInfo.ChangedFilename)
 				continue
 			}
-			fileInfo.watchChangedFilename = watchInfo.ChangedFilename
-			fileInfo.isRename = watchInfo.IsRename
+
 			if !fileInfo.Handler.Tail {
 				plg.Infof("%q no need tail", watchInfo.Path)
 				continue
@@ -276,9 +273,19 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 			if fileInfo.IsDir() {
 				tmp, err := fileInfo.getFileInfo(watchInfo.ChangedFilename)
 				if err != nil {
-					plg.Errorf("GetFileInfo %q is failed, err: %v", watchInfo.ChangedFilename, err)
+					plg.Errorf("getFileInfo %q is failed, err: %v", watchInfo.ChangedFilename, err)
+					continue
 				}
 				fileInfo = tmp
+			}
+			fileInfo.op = watchInfo.Op
+			fileInfo.watchChangeFilename = watchInfo.ChangedFilename
+
+			// 是否修改名称, 需要重置下
+			if isRename(fileInfo.op) {
+				plg.Infof("rename %q, it will reset", fileInfo.FileName())
+				fileInfo.resetFn()
+				continue
 			}
 			p.parseLog(false, fileInfo)
 		}
@@ -358,7 +365,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	}
 
 	fileSize := st.Size()
-	plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	plg.Infof("filename: %q, op: %s, offset: %d, size: %d", fileInfo.FileName(), fileInfo.op, fileInfo.offset, fileSize)
 	if fileSize == 0 || fileInfo.offset == fileSize {
 		plg.Infof("offset: %d, fileSize: %d it will skip", fileInfo.offset, fileSize)
 		return
@@ -403,13 +410,6 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
-	}
-
-	// 是否修改名称
-	if fileInfo.isRename {
-		fileInfo.closeFileHandle(true)
-		fileInfo.isRename = false
-		return
 	}
 
 	// 保存偏移量

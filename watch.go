@@ -21,11 +21,23 @@ type Watch struct {
 
 // WatchFileInfo
 type WatchFileInfo struct {
-	IsDir           bool   // 是否为目录
-	Dir             string // 原始目录路径
-	Path            string // 原始添加的文件路径, 这里可能是文件路径或目录路径
-	IsRename        bool   // 是否修改名字
+	IsDir bool   // 是否为目录
+	Dir   string // 原始目录路径
+	Path  string // 原始添加的文件路径, 这里可能是文件路径或目录路径
+
+	// 动态参数
+	Op              fs.Op
 	ChangedFilename string // 被监听到的文件名, 绝对路径
+}
+
+func (w *WatchFileInfo) copy() *WatchFileInfo {
+	return &WatchFileInfo{
+		IsDir: w.IsDir,
+		Dir:   w.Dir,
+		Path:  w.Path,
+		// IsRename:        w.IsRename,
+		// ChangedFilename: w.ChangedFilename,
+	}
 }
 
 // NewWatch 监听
@@ -91,8 +103,8 @@ func (w *Watch) Remove(paths ...string) error {
 
 // Close
 func (w *Watch) Close() {
-	w.fileMap = nil
 	w.watcher.Close()
+	// w.fileMap = nil
 }
 
 // Watch 文件异步监听
@@ -120,18 +132,18 @@ func (w *Watch) Watch(busCh chan *WatchFileInfo) {
 					return
 				}
 
-				// 只处理 create, write
-				if !w.inEvenOps(event.Op, fs.Write, fs.Create, fs.Rename) {
+				if !w.inEvenOps(event.Op, fs.Write, fs.Rename) {
 					continue
 				}
 
-				// plg.Infof("filename: %q, op: %s", event.Name, event.Op.String())
 				watchFileInfo := w.getWatchFileInfo(event.Name)
 				if watchFileInfo == nil {
 					continue
 				}
-				watchFileInfo.IsRename = event.Op == fs.Rename
+				watchFileInfo.Op = event.Op
 				watchFileInfo.ChangedFilename = event.Name
+				// plg.Infof("filename: %q, op: %s, watch: %s", event.Name, event.Op.String(), base.GetJson2Dump(watchFileInfo))
+				// plg.Infof("filename: %q, op: %s", event.Name, event.Op.String())
 				busCh <- watchFileInfo
 			}
 		}
@@ -153,7 +165,7 @@ func (w *Watch) getWatchFileInfo(filename string) *WatchFileInfo {
 		}
 		break
 	}
-	return watchFileInfo
+	return watchFileInfo.copy()
 }
 
 func (w *Watch) inEvenOps(target fs.Op, ins ...fs.Op) bool {

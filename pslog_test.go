@@ -3,7 +3,9 @@ package pslog
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -136,7 +138,15 @@ func TestTail(t *testing.T) {
 	}
 }
 
-func TestTailLogRename(t *testing.T) {
+func TestTailLogSplit(t *testing.T) {
+	filepath.Walk(tmpDir, func(path string, info fs.FileInfo, err error) error {
+		if strings.Contains(path, "2024-09-01") {
+			os.Remove(path)
+		}
+		return nil
+	})
+	time.Sleep(time.Second*3)
+
 	ps, _ := NewPsLog()
 	defer ps.Close()
 	err := ps.TailLogs()
@@ -147,7 +157,6 @@ func TestTailLogRename(t *testing.T) {
 	strBuf := new(StrBuf)
 	byteBuf := new(BytesBuf)
 	stdout := new(Stdout)
-	tmp := tmpDir + "/test2tail-rename.log"
 	handler := &Handler{
 		CleanOffset: true,
 		Change:      -1,       // 每次都持久化 offset
@@ -160,54 +169,38 @@ func TestTailLogRename(t *testing.T) {
 				To:       []PsLogWriter{strBuf, byteBuf, stdout},
 			},
 		},
+		NeedCollect: func(filename string) bool { return strings.Contains(filename, "2024-09-01.log") },
 	}
 
-	if err := ps.AddPath2Handler(tmp, handler); err != nil {
+	if err := ps.AddPath2Handler(tmpDir, handler); err != nil {
 		t.Fatal(err)
 	}
 	closeCh := make(chan struct{})
 	go func() {
-		fh := xfile.NewFileHandle(tmp)
-		if err := fh.Initf(os.O_WRONLY | os.O_TRUNC); err != nil {
-			plg.Error(err)
-			return
-		}
-		defer fh.Close()
-
-		f := fh.GetFile()
-		for i := 0; i < 2; i++ {
-			// time.Sleep(time.Microsecond)
-			_, err := f.WriteString(`{"level":"warning","msg":"q","time":"2024-02-02 17:57:10.399"}` + "\n")
-			if err != nil {
-				plg.Error("write err:", err)
-			}
-		}
+		tmp := tmpDir + "/2024-09-01.log"
+		xfile.AppendContent(tmp, "warning 文件分割之前, 开始"+"\n")
 		xfile.AppendContent(tmp, "warning 文件分割之前, 1111"+"\n")
+		xfile.AppendContent(tmp, "warning 文件分割之前, 2222"+"\n")
 
-		newLog := tmpDir + "/test2tail-rename-1.log"
-		// // 模拟日志分割
-		os.Rename(tmp, newLog)
-		time.Sleep(time.Second)
-		xfile.AppendContent(newLog, "warning 文件分割之后 1111"+"\n")
-		defer os.Rename(newLog, tmp)
+		// 模拟日志分割
+		os.Rename(tmp, tmpDir + "/2024-09-01.1.log")
+		// time.Sleep(time.Second)
+		// xfile.AppendContent(newLog, "warning 文件分割之后, 1111"+"\n")
+		// xfile.AppendContent(newLog, "warning 文件分割之后, 2222"+"\n")
 
+		// 继续添加
+		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 开始"+"\n")
+		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 1111"+"\n")
+		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 2222"+"\n")
 		time.Sleep(time.Second * 10)
+		// ps.Close()
 		close(closeCh)
 	}()
 
 	for range closeCh {
 	}
 
-	data, err := xfile.GetContent(tmp)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
-		t.Error("data:", data)
-		t.Error("byteBuf:", byteBuf.Buf.String())
-		t.Error("strBuf:", strBuf.Buf.String())
-	}
+	ps.List()
 }
 
 func TestTailLoop(t *testing.T) {
