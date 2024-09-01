@@ -162,9 +162,10 @@ func (p *PsLog) addLogPath(path2HandlerMap map[string]*Handler, existSkip ...boo
 		if ok {
 			fileInfo.Handler = handler
 		} else {
-			fileInfo = &FileInfo{Handler: handler, fhMap: make(map[string]*fileHandleInfo)}
-			fileInfo.Parse(path)
-			fileInfo.initOffset()
+			fileInfo, err = NewFileInfo(path, handler)
+			if err != nil {
+				return err
+			}
 		}
 		if p.tail && handler.Tail {
 			// 直接监听对应的目录
@@ -192,21 +193,10 @@ func (p *PsLog) prePath2Handler(path2HandlerMap map[string]*Handler) (map[string
 				return nil, fmt.Errorf("%q no has handler", path)
 			}
 		}
-		if err := handler.Valid(); err != nil {
+		handler.path = path
+		if err := handler.init(); err != nil {
 			return nil, fmt.Errorf("%q handler is not ok, err: %v", path, err)
 		}
-		handler.init()
-
-		// 判断下是否为目录
-		st, err := os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("os.Stat %q is failed, err: %v", path, err)
-		}
-		if st.IsDir() && handler.NeedCollect == nil {
-			return nil, fmt.Errorf("%q is dir, NeedCollect also is nil", path)
-		}
-		handler.isDir = st.IsDir()
-		handler.path = path
 		new[path] = handler
 	}
 	return new, nil
@@ -238,7 +228,7 @@ func (p *PsLog) Close() {
 func (p *PsLog) TailLogs(watchChSize ...int) error {
 	p.tail = true
 
-	size := 1 << 4
+	size := 2
 	if len(watchChSize) > 0 && watchChSize[0] > 0 {
 		size = watchChSize[0]
 	}
@@ -269,13 +259,32 @@ func (p *PsLog) TailLogs(watchChSize ...int) error {
 			}
 
 			// 如果是目录, 判断下是否需要采集
-			if watchInfo.IsDir && !fileInfo.needCollect(watchInfo.ChangedFilename) {
+			if fileInfo.IsDir() && !fileInfo.needCollect(watchInfo.ChangedFilename) {
+				plg.Infof("%q no need collect", watchInfo.ChangedFilename)
 				continue
 			}
-			fileInfo.changedFilename = watchInfo.ChangedFilename
-			fileInfo.isRename = watchInfo.IsRename
+
 			if !fileInfo.Handler.Tail {
 				plg.Infof("%q no need tail", watchInfo.Path)
+				continue
+			}
+
+			// 目录的话, 需要取对应的信息
+			if fileInfo.IsDir() {
+				tmp, err := fileInfo.getFileInfo(watchInfo.ChangedFilename)
+				if err != nil {
+					plg.Errorf("getFileInfo %q is failed, err: %v", watchInfo.ChangedFilename, err)
+					continue
+				}
+				fileInfo = tmp
+			}
+			fileInfo.op = watchInfo.Op
+			fileInfo.watchChangeFilename = watchInfo.ChangedFilename
+
+			// 是否修改名称, 需要重置下
+			if isRename(fileInfo.op) {
+				plg.Infof("rename %q, it will reset", fileInfo.FileName())
+				fileInfo.resetFn()
 				continue
 			}
 			p.parseLog(false, fileInfo)
@@ -296,11 +305,24 @@ func (p *PsLog) CronLogs(makeUpTail ...bool) {
 	p.rwMu.RLock()
 	tmpLogMap := make(map[string]*FileInfo, len(p.logMap))
 	for path, fileInfo := range p.logMap {
-		if fileInfo.Handler.isDir {
-			plg.Warningf("cron %q is dir, it will skip", path)
+		if !fileInfo.IsDir() {
+			tmpLogMap[path] = fileInfo
 			continue
 		}
-		tmpLogMap[path] = fileInfo
+
+		// 目录
+		fileInfo.loopDir(path, func(info os.FileInfo) error {
+			filename := filepath.Join(path, info.Name())
+			if fileInfo.needCollect(filename) {
+				tmp, err := fileInfo.getFileInfo(filename)
+				if err != nil {
+					plg.Errorf("cron fileInfo.getFileInfo %q is failed, err: %v", err)
+					return nil
+				}
+				tmpLogMap[filename] = tmp
+			}
+			return nil
+		})
 	}
 	p.rwMu.RUnlock()
 
@@ -343,7 +365,7 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	}
 
 	fileSize := st.Size()
-	plg.Infof("filename: %q, offset: %d, size: %d", fileInfo.FileName(), fileInfo.offset, fileSize)
+	plg.Infof("filename: %q, op: %s, offset: %d, size: %d", fileInfo.FileName(), fileInfo.op, fileInfo.offset, fileSize)
 	if fileSize == 0 || fileInfo.offset == fileSize {
 		plg.Infof("offset: %d, fileSize: %d it will skip", fileInfo.offset, fileSize)
 		return
@@ -388,13 +410,6 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	// plg.Info("dataMap:", base.ToString(dataMap))
 	if len(dataMap) > 0 {
 		p.writer(dataMap)
-	}
-
-	// 是否修改名称
-	if fileInfo.isRename {
-		fileInfo.closeFileHandle()
-		fileInfo.isRename = false
-		return
 	}
 
 	// 保存偏移量
@@ -511,8 +526,9 @@ func (p *PsLog) cleanUp(t time.Time) {
 	// 2. 打开的文件句柄由 filePool 会根据 lru 淘汰时进行关闭, 不需在此处理, 但建议主动处理
 	for _, path := range deleteKeys {
 		fileInfo := p.logMap[path]
-		if fileInfo.Handler.IsDir() {
-			fileInfo.close()
+		if fileInfo.IsDir() {
+			fileInfo.expireClose()
+			fileInfo.Extension() // 延期
 			continue
 		}
 		delete(p.logMap, path)
