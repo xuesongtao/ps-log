@@ -164,7 +164,7 @@ func TestTailLogSplit(t *testing.T) {
 		ExpireAt:    NoExpire, // 文件句柄不过期
 		Targets: []*Target{
 			{
-				Content:  "warning",
+				Content:  "[projectPublic]",
 				Excludes: []string{},
 				To:       []PsLogWriter{strBuf, byteBuf, stdout},
 			},
@@ -178,9 +178,9 @@ func TestTailLogSplit(t *testing.T) {
 	closeCh := make(chan struct{})
 	go func() {
 		tmp := tmpDir + "/2024-09-01.log"
-		xfile.AppendContent(tmp, "warning 文件分割之前, 开始"+"\n")
-		xfile.AppendContent(tmp, "warning 文件分割之前, 1111"+"\n")
-		xfile.AppendContent(tmp, "warning 文件分割之前, 2222"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之前, 开始"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之前, 1111"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之前, 2222"+"\n")
 
 		// 模拟日志分割
 		os.Rename(tmp, tmpDir + "/2024-09-01.1.log")
@@ -189,9 +189,9 @@ func TestTailLogSplit(t *testing.T) {
 		// xfile.AppendContent(newLog, "warning 文件分割之后, 2222"+"\n")
 
 		// 继续添加
-		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 开始"+"\n")
-		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 1111"+"\n")
-		xfile.AppendContent(tmp, "warning 文件分割之后又开始, 2222"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之后又开始, 开始"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之后又开始, 1111"+"\n")
+		xfile.AppendContent(tmp, "[projectPublic] 文件分割之后又开始, 2222"+"\n")
 		time.Sleep(time.Second * 10)
 		// ps.Close()
 		close(closeCh)
