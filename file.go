@@ -1,7 +1,9 @@
 package pslog
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,10 +35,11 @@ type FileInfo struct {
 	children map[string]*FileInfo // 如果当前为目录的时候, 这里就有值, key: 文件名[这里不是全路径]
 
 	// 子级特有参数
-	fh           *os.File // 存放的文件句柄, 只有 可读权限, key: filename
-	offsetChange int32    // 记录 offset 变化次数
-	offset       int64    // 当前文件偏移量
-	beginOffset  int64    // 记录最开始的偏移量
+	fh           *os.File      // 存放的文件句柄, 只有 可读权限, key: filename
+	reader       *bufio.Reader // fh 读
+	offsetChange int32         // 记录 offset 变化次数
+	offset       int64         // 当前文件偏移量
+	beginOffset  int64         // 记录最开始的偏移量
 }
 
 // NewFileInfo 初始化
@@ -110,10 +113,38 @@ func (f *FileInfo) initFh() error {
 	return nil
 }
 
+// ScanLinesOfInCr 对文件进行增量读取
+func (f *FileInfo) ScanLinesOfInCr(fn func(row []byte) error) (int64, error) {
+	if f.reader == nil {
+		f.reader = bufio.NewReader(f.fh)
+	}
+	if f.offset > 0 {
+		_, err := f.fh.Seek(f.offset, io.SeekStart)
+		if err != nil {
+			return 0, err
+		}
+	}
+	offset := f.offset
+	for {
+		b, err := f.reader.ReadBytes('\n')
+		if e := fn(b); e != nil {
+			return 0, e
+		}
+		offset += int64(len(b))
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return 0, err
+		}
+	}
+	return offset, nil
+}
+
 func (f *FileInfo) resetFn() {
 	f.closeFileHandle()
 	f.offset = 0
-	f.saveOffset(true, f.offset)
+	f.saveOffset(true)
 }
 
 // Extension 延期
@@ -307,11 +338,11 @@ func (f *FileInfo) cleanOffset() (skip bool) {
 
 // saveOffset 保存偏移量
 // 通过隐藏文件来保存
-func (f *FileInfo) saveOffset(mustSaveOffset bool, offset int64) {
+func (f *FileInfo) saveOffset(mustSaveOffset bool) {
 	filename := f.offsetFilename()
 	// 判断下是否需要持久化
 	if mustSaveOffset || f.Handler.Change == -1 {
-		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
+		if _, err := f.putContent(filename, base.ToString(f.offset)); err != nil {
 			plg.Error("f.putContent is failed, err:", err)
 		}
 		return
@@ -319,7 +350,7 @@ func (f *FileInfo) saveOffset(mustSaveOffset bool, offset int64) {
 
 	f.offsetChange++
 	if f.offsetChange > f.Handler.Change {
-		if _, err := f.putContent(filename, base.ToString(offset)); err != nil {
+		if _, err := f.putContent(filename, base.ToString(f.offset)); err != nil {
 			plg.Error("f.putContent is failed, err:", err)
 		}
 		f.removeOffsetFile()

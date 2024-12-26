@@ -1,10 +1,8 @@
 package pslog
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -375,30 +373,20 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	if fileInfo.offset > fileSize && handler.LoopParse {
 		fileInfo.offset = 0
 	}
-	_, err = f.Seek(fileInfo.offset, io.SeekStart)
-	if err != nil {
-		plg.Error("f.Seek is failed, err:", err)
-		return
-	}
 
-	// 逐行读取
-	rows := bufio.NewScanner(f)
-	// readSize := fileInfo.offset                   // 已读数
 	dataMap := make(map[int]*LogHandlerBus, 1<<3) // key: target.no, 支持一个匹配规则多个处理方式
-	for rows.Scan() {
-		// // 因为当前读为快照读, 所以需要保证本次读取内容小于 fileSize (快照时文件的大小)
-		// if readSize > fileSize {
-		// 	break
-		// }
-
-		rowBytes := rows.Bytes()
-		// readSize += int64(len(rowBytes))
+	offset, err := fileInfo.ScanLinesOfInCr(func(row []byte) error {
 		// 处理行内容, 解决日志中可能出现的换行, 如: err stack
 		// fmt.Println("===:", string(rowBytes))
-		if !handler.MergeRule.Append(rowBytes) {
-			continue
+		if !handler.MergeRule.Append(row) {
+			return nil
 		}
 		p.handleLine(fileInfo, dataMap, handler.MergeRule.Line())
+		return nil
+	})
+	if err != nil {
+		plg.Infof("ScanLinesOfInCr is failed, err: %v", err)
+		return
 	}
 
 	// 说明还有内容没有读取完
@@ -413,9 +401,9 @@ func (p *PsLog) parseLog(mustSaveOffset bool, fileInfo *FileInfo) {
 	}
 
 	// 保存偏移量
-	fileInfo.storeOffset(fileSize)
+	fileInfo.storeOffset(offset)
 	p.taskPool.Submit(func() {
-		fileInfo.saveOffset(mustSaveOffset, fileSize)
+		fileInfo.saveOffset(mustSaveOffset)
 	})
 }
 
