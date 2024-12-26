@@ -1,8 +1,10 @@
 package pslog
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -33,6 +35,60 @@ type BytesBuf struct {
 
 func (b *BytesBuf) WriteTo(bus *LogHandlerBus) {
 	b.Buf.WriteString(bus.Msg)
+}
+
+func TestScan(t *testing.T) {
+	// f, err := os.Open("/Users/xuesongtao/Downloads/info.log")
+	f, err := os.Open("/Users/xuesongtao/Downloads/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	st, _ := f.Stat()
+	// f.Seek(9, io.SeekStart)
+	f.Seek(-2, io.SeekEnd)
+	// f.Seek(offset int64, whence int)
+	rows := bufio.NewScanner(f)
+	size := 0
+	for rows.Scan() {
+		err = rows.Err()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%q", rows.Text())
+		size += int(len(rows.Bytes()))
+	}
+	t.Log("end", size, st.Size())
+}
+
+func TestRead(t *testing.T) {
+	// f, err := os.Open("/Users/xuesongtao/Downloads/info.log")
+	f, err := os.Open("/Users/xuesongtao/Downloads/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	st, _ := f.Stat()
+	// f.Seek(9, io.SeekStart)
+	// f.Seek(offset int64, whence int)
+	f.Seek(0, io.SeekCurrent)
+	r := bufio.NewReader(f)
+	size := 0
+	r.Reset(f)
+	for {
+		b, err := r.ReadBytes('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal(err)
+		}
+		size += len(b)
+		t.Logf("%q", string(b))
+	}
+	t.Log("end", size, st.Size())
 }
 
 func TestList(t *testing.T) {
@@ -130,8 +186,10 @@ func TestTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if byteBuf.Buf.String() != strBuf.Buf.String() && byteBuf.Buf.String() != data {
+	// fmt.Println(byteBuf.Buf.String())
+	// fmt.Println(strBuf.Buf.String())
+	// fmt.Println(data)
+	if strings.TrimSpace(byteBuf.Buf.String()) != strings.TrimSpace(strBuf.Buf.String()) || strings.TrimSpace(byteBuf.Buf.String()) != data {
 		t.Error("data:", data)
 		t.Error("byteBuf:", byteBuf.Buf.String())
 		t.Error("strBuf:", strBuf.Buf.String())
@@ -145,7 +203,7 @@ func TestTailLogSplit(t *testing.T) {
 		}
 		return nil
 	})
-	time.Sleep(time.Second*3)
+	time.Sleep(time.Second * 3)
 
 	ps, _ := NewPsLog()
 	defer ps.Close()
@@ -183,7 +241,7 @@ func TestTailLogSplit(t *testing.T) {
 		xfile.AppendContent(tmp, "[projectPublic] 文件分割之前, 2222"+"\n")
 
 		// 模拟日志分割
-		os.Rename(tmp, tmpDir + "/2024-09-01.1.log")
+		os.Rename(tmp, tmpDir+"/2024-09-01.1.log")
 		// time.Sleep(time.Second)
 		// xfile.AppendContent(newLog, "warning 文件分割之后, 1111"+"\n")
 		// xfile.AppendContent(newLog, "warning 文件分割之后, 2222"+"\n")
