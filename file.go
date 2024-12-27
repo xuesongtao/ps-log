@@ -110,14 +110,12 @@ func (f *FileInfo) initFh() error {
 		return err
 	}
 	f.fh = ff
+	f.reader = bufio.NewReader(f.fh)
 	return nil
 }
 
 // ScanLinesOfInCr 对文件进行增量读取
 func (f *FileInfo) ScanLinesOfInCr(fn func(row []byte) error) (int64, error) {
-	if f.reader == nil {
-		f.reader = bufio.NewReader(f.fh)
-	}
 	if f.offset > 0 {
 		_, err := f.fh.Seek(f.offset, io.SeekStart)
 		if err != nil {
